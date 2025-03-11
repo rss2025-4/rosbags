@@ -23,6 +23,7 @@ from rosbags.interfaces import (
     Qos,
 )
 from rosbags.rosbag2.metadata import dump_qos_v8, dump_qos_v9, parse_qos
+from rosbags.rosbag2.storage_mcap import McapWriter
 from rosbags.rosbag2.storage_sqlite3 import Sqlite3Writer
 from rosbags.typesys import Stores, get_typestore
 
@@ -45,6 +46,10 @@ if TYPE_CHECKING:
         """Storage Writer Protocol."""
 
         path: Path
+
+        def __init__(self, path: Path) -> None:
+            """Initialize."""
+            raise NotImplementedError
 
         def add_msgtype(self, connection: Connection) -> None:
             """Add a msgtypen."""
@@ -77,6 +82,7 @@ class Writer:
         """Storage Plugins."""
 
         SQLITE3 = auto()
+        MCAP = auto()
 
     class CompressionMode(IntEnum):
         """Compession modes."""
@@ -94,6 +100,7 @@ class Writer:
 
     STORAGE_PLUGINS: Mapping[Writer.StoragePlugin, type[StorageWriter]] = {
         StoragePlugin.SQLITE3: Sqlite3Writer,
+        StoragePlugin.MCAP: McapWriter,
     }
 
     def __init__(

@@ -6,6 +6,9 @@ from __future__ import annotations
 
 import heapq
 import struct
+from collections import defaultdict
+from dataclasses import dataclass
+from importlib.metadata import version
 from io import BytesIO
 from struct import iter_unpack, unpack_from
 from typing import TYPE_CHECKING, NamedTuple, cast
@@ -22,7 +25,7 @@ if TYPE_CHECKING:
     from pathlib import Path
     from typing import BinaryIO
 
-    from rosbags.interfaces import Connection
+    from rosbags.interfaces import Connection, ConnectionExtRosbag2
 
     Unpack = Callable[[bytes], 'tuple[int]']
     Unpack2 = Callable[[bytes], 'tuple[int, int]']
@@ -589,3 +592,282 @@ class McapReader:
 
         for reader in self.readers:
             yield from reader.messages(connections, start, stop)
+
+
+def write_uint64(bio: BinaryIO, uint: int) -> None:
+    """Serialize and write uint64."""
+    bio.write(uint.to_bytes(8, byteorder='little'))
+
+
+def write_uint32(bio: BinaryIO, uint: int) -> None:
+    """Serialize and write uint32."""
+    bio.write(uint.to_bytes(4, byteorder='little'))
+
+
+def write_uint16(bio: BinaryIO, uint: int) -> None:
+    """Serialize and write uint16."""
+    bio.write(uint.to_bytes(2, byteorder='little'))
+
+
+def write_string(bio: BinaryIO, string: str) -> None:
+    """Serialize and write string."""
+    data = string.encode()
+    write_uint32(bio, len(data))
+    bio.write(data)
+
+
+def write_schema(bio: BinaryIO, schema: Schema) -> None:
+    """Write schema."""
+    rec = BytesIO()
+    write_uint16(rec, schema.id)
+    write_string(rec, schema.name)
+    write_string(rec, schema.encoding)
+    write_string(rec, schema.data)
+    write_record(bio, 0x03, rec)
+
+
+def write_channel(bio: BinaryIO, channel: Channel, schemas: Iterable[Schema]) -> None:
+    """Write schema."""
+    rec = BytesIO()
+    write_uint16(rec, channel.id)
+    write_uint16(rec, next(x.id for x in schemas if x.name == channel.schema))
+    write_string(rec, channel.topic)
+    write_string(rec, channel.message_encoding)
+    write_uint32(rec, len(channel.metadata))
+    rec.write(channel.metadata)
+    write_record(bio, 0x04, rec)
+
+
+def write_record(bio: BinaryIO, op_: int, record: BytesIO) -> None:
+    """Write record."""
+    bio.write(op_.to_bytes(1, byteorder='little'))
+    write_uint64(bio, record.tell())
+    bio.write(record.getbuffer())
+
+
+@dataclass
+class PendingChunk:
+    """Chunk."""
+
+    message_start_time: int
+    message_end_time: int
+    bio: BytesIO
+    msgs: dict[int, list[tuple[int, int]]]
+
+
+class McapWriter:
+    """Mcap Storage Writer."""
+
+    def __init__(self, path: Path) -> None:
+        """Initialize sqlite3 storage."""
+        self.path = path / f'{path.name}.mcap'
+        self.bio = self.path.open('xb')
+
+        _ = self.bio.write(b'\x89MCAP\x30\r\n')
+        rec = BytesIO()
+        write_string(rec, 'ros2')
+        write_string(rec, f'rosbags-{version("rosbags")}')
+        write_record(self.bio, 0x01, rec)
+
+        self.schemas: list[Schema] = []
+        self.channels: list[Channel] = []
+        self.chunks: list[BytesIO] = []
+        self.chunk = PendingChunk(2**63 - 1, 0, BytesIO(), defaultdict(list))
+        self.compression = ''
+        self.compressor: Callable[[bytes], bytes] = lambda x: x
+
+    def set_compression(self, compression: str) -> None:
+        """Enable compression."""
+        assert compression == 'zstd'
+        self.compression = 'zstd'
+        self.compressor = zstandard.ZstdCompressor().compress
+
+    def add_msgtype(self, connection: Connection) -> None:
+        """Add a msgtype.
+
+        Args:
+            connection: Connection.
+
+        """
+        self.schemas.append(
+            Schema(
+                len(self.schemas) + 1,
+                connection.msgtype,
+                'ros2msg' if connection.msgdef.format == MessageDefinitionFormat.MSG else 'ros2idl',
+                connection.msgdef.data,
+            )
+        )
+        write_schema(self.chunk.bio, self.schemas[-1])
+
+    def add_connection(self, connection: Connection, offered_qos_profiles: str) -> None:
+        """Add a connection.
+
+        Args:
+            connection: Connection.
+            offered_qos_profiles: Serialized QoS profiles.
+
+        """
+        metadata = BytesIO()
+        write_string(metadata, 'offered_qos_profiles')
+        write_string(metadata, offered_qos_profiles)
+
+        self.channels.append(
+            Channel(
+                connection.id,
+                connection.msgtype,
+                connection.topic,
+                cast('ConnectionExtRosbag2', connection.ext).serialization_format,
+                metadata.read(),
+            )
+        )
+        write_channel(self.chunk.bio, self.channels[-1], self.schemas)
+
+    def close_chunk(self) -> None:
+        """Close pending chunk."""
+        rec = BytesIO()
+        write_uint64(rec, self.chunk.message_start_time)
+        write_uint64(rec, self.chunk.message_end_time)
+        write_uint64(rec, self.chunk.bio.tell())
+        write_uint32(rec, 0)
+
+        compressed = self.compressor(self.chunk.bio.getvalue())
+        write_string(rec, self.compression)
+        write_uint64(rec, len(compressed))
+        rec.write(compressed)
+
+        chunk_start = self.bio.tell()
+        write_record(self.bio, 0x06, rec)
+        chunk_end = self.bio.tell()
+
+        offsets: list[tuple[int, int]] = []
+        for cid, msgs in self.chunk.msgs.items():
+            offsets.append((cid, self.bio.tell()))
+            rec = BytesIO()
+            write_uint16(rec, cid)
+            write_uint32(rec, len(msgs) * 16)
+            for ts, offset in msgs:
+                write_uint64(rec, ts)
+                write_uint64(rec, offset)
+            write_record(self.bio, 0x07, rec)
+
+        rec = BytesIO()
+        write_uint64(rec, self.chunk.message_start_time)
+        write_uint64(rec, self.chunk.message_end_time)
+        write_uint64(rec, chunk_start)
+        write_uint64(rec, chunk_end - chunk_start)
+        write_uint32(rec, len(offsets) * 10)
+        for cid, offset in offsets:
+            write_uint16(rec, cid)
+            write_uint64(rec, offset)
+        write_uint64(rec, self.bio.tell() - chunk_end)
+        write_string(rec, self.compression)
+        write_uint64(rec, len(compressed))
+        write_uint64(rec, self.chunk.bio.tell())
+        self.chunks.append(rec)
+
+        self.chunk = PendingChunk(2**63 - 1, 0, BytesIO(), defaultdict(list))
+
+    def write(self, connection: Connection, timestamp: int, data: bytes | memoryview) -> None:
+        """Write message to rosbag2.
+
+        Args:
+            connection: Connection to write message to.
+            timestamp: Message timestamp (ns).
+            data: Serialized message data.
+
+        """
+        self.chunk.message_start_time = min(timestamp, self.chunk.message_start_time)
+        self.chunk.message_end_time = max(timestamp, self.chunk.message_end_time)
+        self.chunk.msgs[connection.id].append((timestamp, self.chunk.bio.tell()))
+
+        rec = BytesIO()
+        write_uint16(rec, connection.id)
+        write_uint32(rec, 0)
+        write_uint64(rec, timestamp)
+        write_uint64(rec, timestamp)
+        rec.write(data)
+        write_record(self.chunk.bio, 0x05, rec)
+
+        if self.chunk.bio.tell() > 2**20:
+            self.close_chunk()
+
+    def close(self, _version: int, metadata: str) -> None:
+        """Close rosbag2 after writing.
+
+        Closes open database transactions and writes metadata.yaml.
+
+        """
+        if self.chunk.bio.tell():
+            self.close_chunk()
+
+        metadata_start = self.bio.tell()
+        rec = BytesIO()
+        write_string(rec, 'rosbag2')
+        sub = BytesIO()
+        write_string(sub, 'serialized_metadata')
+        write_string(sub, metadata)
+        write_uint32(rec, sub.tell())
+        rec.write(sub.getbuffer())
+        write_record(self.bio, 0x0C, rec)
+        metadata_end = self.bio.tell()
+
+        rec = BytesIO()
+        write_uint32(rec, 0)
+        write_record(self.bio, 0x0F, rec)
+
+        schema_start = self.bio.tell()
+        for schema in self.schemas:
+            write_schema(self.bio, schema)
+
+        channel_start = self.bio.tell()
+        for channel in self.channels:
+            write_channel(self.bio, channel, self.schemas)
+
+        chunk_start = self.bio.tell()
+        for chunk in self.chunks:
+            write_record(self.bio, 0x08, chunk)
+
+        metadata_index_start = self.bio.tell()
+        rec = BytesIO()
+        write_uint64(rec, metadata_start)
+        write_uint64(rec, metadata_end - metadata_start)
+        write_string(rec, 'rosbag2')
+        write_record(self.bio, 0x0D, rec)
+
+        summary_offset_start = self.bio.tell()
+
+        if schema_start != channel_start:
+            rec = BytesIO()
+            rec.write(b'\x03')
+            write_uint64(rec, schema_start)
+            write_uint64(rec, channel_start - schema_start)
+            write_record(self.bio, 0x0E, rec)
+
+        if channel_start != chunk_start:
+            rec = BytesIO()
+            rec.write(b'\x04')
+            write_uint64(rec, channel_start)
+            write_uint64(rec, chunk_start - channel_start)
+            write_record(self.bio, 0x0E, rec)
+
+        if chunk_start != metadata_index_start:
+            rec = BytesIO()
+            rec.write(b'\x08')
+            write_uint64(rec, chunk_start)
+            write_uint64(rec, metadata_index_start - chunk_start)
+            write_record(self.bio, 0x0E, rec)
+
+        rec = BytesIO()
+        rec.write(b'\x0d')
+        write_uint64(rec, chunk_start)
+        write_uint64(rec, summary_offset_start - metadata_index_start)
+        write_record(self.bio, 0x0E, rec)
+
+        rec = BytesIO()
+        write_uint64(rec, schema_start)
+        write_uint64(rec, summary_offset_start)
+        write_uint32(rec, 0)
+        write_record(self.bio, 0x02, rec)
+        _ = self.bio.write(b'\x89MCAP\x30\r\n')
+
+        self.bio.close()
