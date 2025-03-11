@@ -101,21 +101,16 @@ Clone the repository and setup your local checkout::
    git clone https://gitlab.com/ternaris/rosbags.git
 
    cd rosbags
-   python -m venv venv
-   . venv/bin/activate
-
-   pip install -r requirements-dev.txt
-   pip install -e .
-
+   uv sync
 
 This creates a new virtual environment with the necessary python dependencies and installs rosbags in editable mode. The rosbags code base uses pytest as its test runner, run the test suite by simply invoking::
 
-   pytest
+   uv run pytest
 
 
 To build the documentation from its source run sphinx-build::
 
-   sphinx-build -a docs public
+   uv run sphinx-build -a docs public
 
 
 The entry point to the local documentation build should be available under ``public/index.html``.
