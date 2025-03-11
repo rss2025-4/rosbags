@@ -41,7 +41,7 @@ if TYPE_CHECKING:
 
 
 class Reader:
-    """Mimimal shim using rosbag2_py to emulate rosbags API."""
+    """Minimal shim using rosbag2_py to emulate rosbags API."""
 
     def __init__(self, path: str | Path) -> None:
         """Initialize reader shim."""

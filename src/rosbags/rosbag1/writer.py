@@ -164,7 +164,7 @@ class Writer:
             path: Filesystem path to bag.
 
         Raises:
-            WriterError: Target path exisits already, Writer can only create new rosbags.
+            WriterError: Target path exists already, Writer can only create new rosbags.
 
         """
         path = Path(path)
@@ -242,7 +242,7 @@ class Writer:
             topic: Topic name.
             msgtype: Message type.
             typestore: Typestore.
-            msgdef: Message definiton.
+            msgdef: Message definition.
             md5sum: Message hash.
             callerid: Caller id.
             latching: Latching information.

@@ -14,7 +14,7 @@ class Stores(Enum):
     EMPTY = 'empty'
     """Only builtin messages (Duration, Time)."""
     LATEST = 'latest'
-    """Alias for lastest ROS2 LTS."""
+    """Alias for latest ROS2 LTS."""
     ROS1_NOETIC = 'ros1_noetic'
     """Noetic Ninjemys."""
     ROS2_DASHING = 'ros2_dashing'

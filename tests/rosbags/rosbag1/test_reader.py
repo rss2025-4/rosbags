@@ -19,7 +19,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 
-def ser(data: dict[str, bytes] | bytes) -> bytes:
+def serialize(data: dict[str, bytes] | bytes) -> bytes:
     """Serialize record header."""
     if isinstance(data, dict):
         fields: list[bytes] = []
@@ -97,7 +97,7 @@ def write_bag(
             for head, data in chunk:
                 if head.get('op') == b'\x07':
                     conn_count += 1
-                    add = ser(head) + ser(data)
+                    add = serialize(head) + serialize(data)
                     chunk_bytes += add
                     connections += add
                 elif head.get('op') == b'\x02':
@@ -116,32 +116,32 @@ def write_bag(
                     index_count[conn] += 1
                     index_msgs[conn] += pack('<LLL', time, 0, offset)
 
-                    add = ser(head) + ser(data)
+                    add = serialize(head) + serialize(data)
                     chunk_bytes += add
                     offset = len(chunk_bytes)
                 else:
-                    add = ser(head) + ser(data)
+                    add = serialize(head) + serialize(data)
                     chunk_bytes += add
 
-            chunk_bytes = ser(
+            chunk_bytes = serialize(
                 {
                     'op': b'\x05',
                     'compression': b'none',
                     'size': pack('<L', len(chunk_bytes)),
                 },
-            ) + ser(chunk_bytes)
+            ) + serialize(chunk_bytes)
             for cid, count in index_count.items():
-                chunk_bytes += ser(
+                chunk_bytes += serialize(
                     {
                         'op': b'\x04',
                         'ver': pack('<L', 1),
                         'conn': pack('<L', cid),
                         'count': pack('<L', count),
                     },
-                ) + ser(index_msgs[cid])
+                ) + serialize(index_msgs[cid])
 
             chunks_bytes += chunk_bytes
-            chunkinfos += ser(
+            chunkinfos += serialize(
                 {
                     'op': b'\x06',
                     'ver': pack('<L', 1),
@@ -150,7 +150,7 @@ def write_bag(
                     'end_time': pack('<LL', end_time, 0),
                     'count': pack('<L', len(counts.keys())),
                 },
-            ) + ser(b''.join([pack('<LL', x, y) for x, y in counts.items()]))
+            ) + serialize(b''.join([pack('<LL', x, y) for x, y in counts.items()]))
             pos += len(chunk_bytes)
 
     header['conn_count'] = pack('<L', conn_count)
@@ -158,7 +158,7 @@ def write_bag(
     if 'index_pos' not in header:
         header['index_pos'] = pack('<Q', pos)
 
-    header_bytes = ser(header)
+    header_bytes = serialize(header)
     header_bytes += b'\x20' * (4096 - len(header_bytes))
 
     _ = bag.write_bytes(b''.join([magic, header_bytes, chunks_bytes, connections, chunkinfos]))

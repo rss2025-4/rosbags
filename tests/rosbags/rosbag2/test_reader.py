@@ -89,7 +89,7 @@ rosbag2_bagfile_information:
 
 @pytest.fixture
 def empty_bag(tmp_path: Path) -> Path:
-    """Manually contruct empty bag."""
+    """Manually construct empty bag."""
     _ = (tmp_path / 'metadata.yaml').write_text(METADATA_EMPTY)
     dbpath = tmp_path / 'db.db3'
     dbh = sqlite3.connect(dbpath)
@@ -99,7 +99,7 @@ def empty_bag(tmp_path: Path) -> Path:
 
 @pytest.fixture(params=['none', 'file', 'message'])
 def bag_sqlite3(request: SubRequest, tmp_path: Path) -> Path:
-    """Manually contruct sqlite3 bag."""
+    """Manually construct sqlite3 bag."""
     param: str = request.param  # pyright: ignore[reportAny]
     _ = (tmp_path / 'metadata.yaml').write_text(
         METADATA.format(
@@ -442,7 +442,7 @@ CHANNELS = [
     params=['unindexed', 'partially_indexed', 'indexed', 'chunked_unindexed', 'chunked_indexed'],
 )
 def bag_mcap(request: SubRequest, tmp_path: Path) -> Path:
-    """Manually contruct mcap bag."""
+    """Manually construct mcap bag."""
     param: str = request.param  # pyright: ignore[reportAny]
     _ = (tmp_path / 'metadata.yaml').write_text(
         METADATA.format(

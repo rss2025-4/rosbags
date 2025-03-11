@@ -163,9 +163,9 @@ Changes
 
 0.9.15 - 2023-03-02
 -------------------
-- Refactor rosbag2 Reader for multipe storage backends
+- Refactor rosbag2 Reader for multiple storage backends
 - Improve parsing of IDL files
-- Handle bags contaning only connection records
+- Handle bags containing only connection records
 - Add AnyReader to documentation
 - Add initial MCAP reader for rosbag2 `#33`_
 
@@ -274,7 +274,7 @@ Changes
 
 - Add const fields to type classes
 - Add CDR to ROS1 bytestream conversion
-- Add ROS1 message definiton generator
+- Add ROS1 message definition generator
 - Use connection oriented APIs in readers and writers
 - Add rosbag1 writer
 

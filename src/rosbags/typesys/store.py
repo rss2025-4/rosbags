@@ -149,7 +149,7 @@ class Typestore:
         Args:
             message: Message object.
             typename: Message type name.
-            little_endian: Should use little endianess.
+            little_endian: Should use little endianness.
             typestore: Type store.
 
         Returns:

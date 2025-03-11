@@ -180,13 +180,13 @@ def generate_getsize_cdr(fields: Fielddefs, typestore: Typestore) -> tuple[CDRSe
     return cast('CDRSerSize', getattr(compile_lines(lines), funcname)), is_stat * size
 
 
-def generate_serialize_cdr(fields: Fielddefs, typestore: Typestore, endianess: str) -> CDRSer:
+def generate_serialize_cdr(fields: Fielddefs, typestore: Typestore, endianness: str) -> CDRSer:
     """Generate cdr serialization function.
 
     Args:
         fields: Fields of message.
         typestore: Typestore.
-        endianess: Endianess of rawdata.
+        endianness: Endianness of rawdata.
 
     Returns:
         Serializer function.
@@ -197,19 +197,19 @@ def generate_serialize_cdr(fields: Fielddefs, typestore: Typestore, endianess: s
         'import sys',
         'import numpy',
         'from rosbags.serde import SerdeError',
-        f'from rosbags.serde.primitives import pack_bool_{endianess}',
-        f'from rosbags.serde.primitives import pack_byte_{endianess}',
-        f'from rosbags.serde.primitives import pack_char_{endianess}',
-        f'from rosbags.serde.primitives import pack_int8_{endianess}',
-        f'from rosbags.serde.primitives import pack_int16_{endianess}',
-        f'from rosbags.serde.primitives import pack_int32_{endianess}',
-        f'from rosbags.serde.primitives import pack_int64_{endianess}',
-        f'from rosbags.serde.primitives import pack_uint8_{endianess}',
-        f'from rosbags.serde.primitives import pack_uint16_{endianess}',
-        f'from rosbags.serde.primitives import pack_uint32_{endianess}',
-        f'from rosbags.serde.primitives import pack_uint64_{endianess}',
-        f'from rosbags.serde.primitives import pack_float32_{endianess}',
-        f'from rosbags.serde.primitives import pack_float64_{endianess}',
+        f'from rosbags.serde.primitives import pack_bool_{endianness}',
+        f'from rosbags.serde.primitives import pack_byte_{endianness}',
+        f'from rosbags.serde.primitives import pack_char_{endianness}',
+        f'from rosbags.serde.primitives import pack_int8_{endianness}',
+        f'from rosbags.serde.primitives import pack_int16_{endianness}',
+        f'from rosbags.serde.primitives import pack_int32_{endianness}',
+        f'from rosbags.serde.primitives import pack_int64_{endianness}',
+        f'from rosbags.serde.primitives import pack_uint8_{endianness}',
+        f'from rosbags.serde.primitives import pack_uint16_{endianness}',
+        f'from rosbags.serde.primitives import pack_uint32_{endianness}',
+        f'from rosbags.serde.primitives import pack_uint64_{endianness}',
+        f'from rosbags.serde.primitives import pack_float32_{endianness}',
+        f'from rosbags.serde.primitives import pack_float64_{endianness}',
         'def serialize_cdr(rawdata, pos, message, typestore):',
     ]
     for fcurr, fnext in pairwise([*fields, None]):
@@ -217,7 +217,7 @@ def generate_serialize_cdr(fields: Fielddefs, typestore: Typestore, endianess: s
 
         lines.append(f'  val = message.{fieldname}')
         if desc[0] == Nodetype.NAME:
-            lines.append(f'  func = typestore.get_msgdef("{desc[1]}").serialize_cdr_{endianess}')
+            lines.append(f'  func = typestore.get_msgdef("{desc[1]}").serialize_cdr_{endianness}')
             lines.append('  pos = func(rawdata, pos, val, typestore)')
             aligned = align_after(desc, typestore)
 
@@ -225,13 +225,13 @@ def generate_serialize_cdr(fields: Fielddefs, typestore: Typestore, endianess: s
             if desc[1][0] == 'string':
                 lines.append('  bval = memoryview(val.encode())')
                 lines.append('  length = len(bval) + 1')
-                lines.append(f'  pack_int32_{endianess}(rawdata, pos, length)')
+                lines.append(f'  pack_int32_{endianness}(rawdata, pos, length)')
                 lines.append('  pos += 4')
                 lines.append('  rawdata[pos:pos + length - 1] = bval')
                 lines.append('  pos += length')
                 aligned = 1
             else:
-                lines.append(f'  pack_{desc[1][0]}_{endianess}(rawdata, pos, val)')
+                lines.append(f'  pack_{desc[1][0]}_{endianness}(rawdata, pos, val)')
                 lines.append(f'  pos += {SIZEMAP[desc[1][0]]}')
                 aligned = SIZEMAP[desc[1][0]]
 
@@ -246,13 +246,13 @@ def generate_serialize_cdr(fields: Fielddefs, typestore: Typestore, endianess: s
                         lines.append(f'  bval = memoryview(val[{idx}].encode())')
                         lines.append('  length = len(bval) + 1')
                         lines.append('  pos = (pos + 4 - 1) & -4')
-                        lines.append(f'  pack_int32_{endianess}(rawdata, pos, length)')
+                        lines.append(f'  pack_int32_{endianness}(rawdata, pos, length)')
                         lines.append('  pos += 4')
                         lines.append('  rawdata[pos:pos + length - 1] = bval')
                         lines.append('  pos += length')
                     aligned = 1
                 else:
-                    if (endianess == 'le') != (sys.byteorder == 'little'):
+                    if (endianness == 'le') != (sys.byteorder == 'little'):
                         lines.append('  val = val.byteswap()')
                     size = length * SIZEMAP[subdesc[1][0]]
                     lines.append(f'  rawdata[pos:pos + {size}] = val.view(numpy.uint8)')
@@ -264,7 +264,7 @@ def generate_serialize_cdr(fields: Fielddefs, typestore: Typestore, endianess: s
                 anext_before = align(subdesc, typestore)
                 anext_after = align_after(subdesc, typestore)
                 lines.append(
-                    f'  func = typestore.get_msgdef("{subdesc[1]}").serialize_cdr_{endianess}',
+                    f'  func = typestore.get_msgdef("{subdesc[1]}").serialize_cdr_{endianness}',
                 )
                 for idx in range(length):
                     if anext_before > anext_after:
@@ -273,7 +273,7 @@ def generate_serialize_cdr(fields: Fielddefs, typestore: Typestore, endianess: s
                 aligned = align_after(subdesc, typestore)
         else:
             assert desc[0] == Nodetype.SEQUENCE
-            lines.append(f'  pack_int32_{endianess}(rawdata, pos, len(val))')
+            lines.append(f'  pack_int32_{endianness}(rawdata, pos, len(val))')
             lines.append('  pos += 4')
             aligned = 4
             subdesc = desc[1][0]
@@ -284,14 +284,14 @@ def generate_serialize_cdr(fields: Fielddefs, typestore: Typestore, endianess: s
                     lines.append('    bval = memoryview(item.encode())')
                     lines.append('    length = len(bval) + 1')
                     lines.append('    pos = (pos + 4 - 1) & -4')
-                    lines.append(f'    pack_int32_{endianess}(rawdata, pos, length)')
+                    lines.append(f'    pack_int32_{endianness}(rawdata, pos, length)')
                     lines.append('    pos += 4')
                     lines.append('    rawdata[pos:pos + length - 1] = bval')
                     lines.append('    pos += length')
                     aligned = 1
                 else:
                     lines.append(f'  size = len(val) * {SIZEMAP[subdesc[1][0]]}')
-                    if (endianess == 'le') != (sys.byteorder == 'little'):
+                    if (endianness == 'le') != (sys.byteorder == 'little'):
                         lines.append('  val = val.byteswap()')
                     if aligned < (anext_before := align(subdesc, typestore)):
                         lines.append('  if size:')
@@ -303,7 +303,7 @@ def generate_serialize_cdr(fields: Fielddefs, typestore: Typestore, endianess: s
             if subdesc[0] == Nodetype.NAME:
                 anext_before = align(subdesc, typestore)
                 lines.append(
-                    f'  func = typestore.get_msgdef("{subdesc[1]}").serialize_cdr_{endianess}',
+                    f'  func = typestore.get_msgdef("{subdesc[1]}").serialize_cdr_{endianness}',
                 )
                 lines.append('  for item in val:')
                 lines.append(f'    pos = (pos + {anext_before} - 1) & -{anext_before}')
@@ -321,14 +321,14 @@ def generate_serialize_cdr(fields: Fielddefs, typestore: Typestore, endianess: s
 
 
 def generate_deserialize_cdr(
-    fields: Fielddefs, typestore: Typestore, endianess: str
+    fields: Fielddefs, typestore: Typestore, endianness: str
 ) -> CDRDeser[T]:
     """Generate cdr deserialization function.
 
     Args:
         fields: Fields of message.
         typestore: Typestore.
-        endianess: Endianess of rawdata.
+        endianness: Endianness of rawdata.
 
     Returns:
         Deserializer function.
@@ -339,23 +339,23 @@ def generate_deserialize_cdr(
         'import sys',
         'import numpy',
         'from rosbags.serde import SerdeError',
-        f'from rosbags.serde.primitives import unpack_bool_{endianess}',
-        f'from rosbags.serde.primitives import unpack_byte_{endianess}',
-        f'from rosbags.serde.primitives import unpack_char_{endianess}',
-        f'from rosbags.serde.primitives import unpack_int8_{endianess}',
-        f'from rosbags.serde.primitives import unpack_int16_{endianess}',
-        f'from rosbags.serde.primitives import unpack_int32_{endianess}',
-        f'from rosbags.serde.primitives import unpack_int64_{endianess}',
-        f'from rosbags.serde.primitives import unpack_uint8_{endianess}',
-        f'from rosbags.serde.primitives import unpack_uint16_{endianess}',
-        f'from rosbags.serde.primitives import unpack_uint32_{endianess}',
-        f'from rosbags.serde.primitives import unpack_uint64_{endianess}',
-        f'from rosbags.serde.primitives import unpack_float32_{endianess}',
-        f'from rosbags.serde.primitives import unpack_float64_{endianess}',
+        f'from rosbags.serde.primitives import unpack_bool_{endianness}',
+        f'from rosbags.serde.primitives import unpack_byte_{endianness}',
+        f'from rosbags.serde.primitives import unpack_char_{endianness}',
+        f'from rosbags.serde.primitives import unpack_int8_{endianness}',
+        f'from rosbags.serde.primitives import unpack_int16_{endianness}',
+        f'from rosbags.serde.primitives import unpack_int32_{endianness}',
+        f'from rosbags.serde.primitives import unpack_int64_{endianness}',
+        f'from rosbags.serde.primitives import unpack_uint8_{endianness}',
+        f'from rosbags.serde.primitives import unpack_uint16_{endianness}',
+        f'from rosbags.serde.primitives import unpack_uint32_{endianness}',
+        f'from rosbags.serde.primitives import unpack_uint64_{endianness}',
+        f'from rosbags.serde.primitives import unpack_float32_{endianness}',
+        f'from rosbags.serde.primitives import unpack_float64_{endianness}',
         'def deserialize_cdr(rawdata, pos, cls, typestore):',
     ]
 
-    funcname = f'deserialize_cdr_{endianess}'
+    funcname = f'deserialize_cdr_{endianness}'
     lines.append('  values = []')
     for fcurr, fnext in pairwise([*fields, None]):
         _, desc = cast('tuple[str, FieldDesc]', fcurr)
@@ -368,13 +368,13 @@ def generate_deserialize_cdr(
 
         elif desc[0] == Nodetype.BASE:
             if desc[1][0] == 'string':
-                lines.append(f'  length = unpack_int32_{endianess}(rawdata, pos)[0]')
+                lines.append(f'  length = unpack_int32_{endianness}(rawdata, pos)[0]')
                 lines.append('  string = bytes(rawdata[pos + 4:pos + 4 + length - 1]).decode()')
                 lines.append('  values.append(string)')
                 lines.append('  pos += 4 + length')
                 aligned = 1
             else:
-                lines.append(f'  value = unpack_{desc[1][0]}_{endianess}(rawdata, pos)[0]')
+                lines.append(f'  value = unpack_{desc[1][0]}_{endianness}(rawdata, pos)[0]')
                 lines.append('  values.append(value)')
                 lines.append(f'  pos += {SIZEMAP[desc[1][0]]}')
                 aligned = SIZEMAP[desc[1][0]]
@@ -387,7 +387,7 @@ def generate_deserialize_cdr(
                     for idx in range(length):
                         if idx:
                             lines.append('  pos = (pos + 4 - 1) & -4')
-                        lines.append(f'  length = unpack_int32_{endianess}(rawdata, pos)[0]')
+                        lines.append(f'  length = unpack_int32_{endianness}(rawdata, pos)[0]')
                         lines.append(
                             '  value.append(bytes(rawdata[pos + 4:pos + 4 + length - 1]).decode())',
                         )
@@ -402,7 +402,7 @@ def generate_deserialize_cdr(
                             f'dtype=numpy.{ndtype(subdesc[1][0])}, count={length}, offset=pos)'
                         ),
                     )
-                    if (endianess == 'le') != (sys.byteorder == 'little'):
+                    if (endianness == 'le') != (sys.byteorder == 'little'):
                         lines.append('  val = val.byteswap()')
                     lines.append('  values.append(val)')
                     lines.append(f'  pos += {size}')
@@ -425,7 +425,7 @@ def generate_deserialize_cdr(
 
         else:
             assert desc[0] == Nodetype.SEQUENCE
-            lines.append(f'  size = unpack_int32_{endianess}(rawdata, pos)[0]')
+            lines.append(f'  size = unpack_int32_{endianness}(rawdata, pos)[0]')
             lines.append('  pos += 4')
             aligned = 4
             subdesc = desc[1][0]
@@ -435,7 +435,7 @@ def generate_deserialize_cdr(
                     lines.append('  value = []')
                     lines.append('  for _ in range(size):')
                     lines.append('    pos = (pos + 4 - 1) & -4')
-                    lines.append(f'    length = unpack_int32_{endianess}(rawdata, pos)[0]')
+                    lines.append(f'    length = unpack_int32_{endianness}(rawdata, pos)[0]')
                     lines.append(
                         '    value.append(bytes(rawdata[pos + 4:pos + 4 + length - 1]).decode())',
                     )
@@ -453,7 +453,7 @@ def generate_deserialize_cdr(
                             f'dtype=numpy.{ndtype(subdesc[1][0])}, count=size, offset=pos)'
                         ),
                     )
-                    if (endianess == 'le') != (sys.byteorder == 'little'):
+                    if (endianness == 'le') != (sys.byteorder == 'little'):
                         lines.append('  val = val.byteswap()')
                     lines.append('  values.append(val)')
                     lines.append('  pos += length')

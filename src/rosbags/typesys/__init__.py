@@ -4,7 +4,7 @@
 
 The type system manages ROS message types and ships all standard ROS2
 distribution message types by default. The system supports custom message
-types through parsers that dynamically parse custom message definitons
+types through parsers that dynamically parse custom message definitions
 from different source formats.
 
 Supported formats:

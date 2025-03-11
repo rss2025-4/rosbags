@@ -2,7 +2,7 @@
 Bench
 =====
 
-Check and benchmark ``rosbags.rosbag2`` agains ``rosbag2_py``. The provided Dockerfile creates an execution environment for the script. Run from the root of this repository::
+Check and benchmark ``rosbags.rosbag2`` against ``rosbag2_py``. The provided Dockerfile creates an execution environment for the script. Run from the root of this repository::
 
   $ docker build -t rosbags/bench -f tools/bench/Dockerfile .
 

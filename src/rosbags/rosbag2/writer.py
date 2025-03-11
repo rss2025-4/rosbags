@@ -105,7 +105,7 @@ class Writer:
             version: Rosbag2 file format version.
 
         Raises:
-            WriterError: Target path exisits already, Writer can only create new rosbags.
+            WriterError: Target path exists already, Writer can only create new rosbags.
 
         """
         path = Path(path)
@@ -206,7 +206,7 @@ class Writer:
             topic: Topic name.
             msgtype: Message type.
             typestore: Typestore.
-            msgdef: Message definiton.
+            msgdef: Message definition.
             rihs01: Message hash.
             serialization_format: Serialization format.
             offered_qos_profiles: QOS Profile.

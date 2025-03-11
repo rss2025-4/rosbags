@@ -114,7 +114,7 @@ PARSER = ArgumentParser(
         '    Convert bag from rosbag1 to rosbag2, using per file compression for destination:\n'
         '        rosbags-convert --src example.bag --dst ros2_bagdir --compress zstd\n'
         '\n'
-        '    Convert bag from rosbag1 to rosbag2, upgrate types to iron:\n'
+        '    Convert bag from rosbag1 to rosbag2, upgrade types to iron:\n'
         '        rosbags-convert --src example.bag --dst ros2_bagdir --dst-typestore ros2_iron\n'
         '\n'
         '    Convert bag from legacy rosbag2 (with humble types) to rosbag1:\n'

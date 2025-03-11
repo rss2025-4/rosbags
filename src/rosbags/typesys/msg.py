@@ -3,7 +3,7 @@
 """MSG Parser.
 
 Grammar, parse tree visitor and conversion functions for message definitions in
-`MSG`_ format. It also supports concatened message definitions as found in
+`MSG`_ format. It also supports concatenated message definitions as found in
 Rosbag1 connection information.
 
 .. _MSG: http://wiki.ros.org/msg
@@ -361,7 +361,7 @@ def get_types_from_msg(text: str, name: str) -> Typesdict:
     """Get type from msg message definition.
 
     Args:
-        text: Message definiton.
+        text: Message definition.
         name: Message typename.
 
     Returns:

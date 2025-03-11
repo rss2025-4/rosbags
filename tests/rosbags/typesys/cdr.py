@@ -414,7 +414,7 @@ def get_array_size(desc: FieldDesc, val: Array, size: int, typestore: Typestore)
 
 
 def get_size(message: object, msgdef: Msgdef[object], typestore: Typestore, size: int = 0) -> int:
-    """Calculate size of serialzied message.
+    """Calculate size of serialized message.
 
     Args:
         message: Message object.
@@ -475,7 +475,7 @@ def serialize(
     Args:
         message: Message object.
         typename: Type to serialize.
-        little_endian: Should use little endianess.
+        little_endian: Should use little endianness.
         typestore: Typestore.
 
     Returns:

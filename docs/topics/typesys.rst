@@ -50,7 +50,7 @@ Usage example:
 
    typestore = get_typestore(Stores.ROS2_HUMBLE)
 
-   # Use CDR for ROS2, endianess is handled automatically.
+   # Use CDR for ROS2, endianness is handled automatically.
    msg = typestore.deserialize_cdr(cdr_bytes, 'geometry_msgs/msg/Quaternion')
 
    # Use the ROS1 format for ROS1.
@@ -70,10 +70,10 @@ Type store instances provide two serialization functions:
 
    typestore = get_typestore(Stores.ROS2_HUMBLE)
 
-   # Use CDR for ROS2, serialize message with system endianess.
+   # Use CDR for ROS2, serialize message with system endianness.
    cdr_bytes = typestore.serialize_cdr(msg, 'geometry_msgs/msg/Quaternion')
 
-   # Use CDR for ROS2, serialize message with explicit endianess.
+   # Use CDR for ROS2, serialize message with explicit endianness.
    cdr_bytes = typestore.serialize_cdr(msg, 'geometry_msgs/msg/Quaternion', little_endian=False)
 
    # Use ROS1 format for ROS1, this format is little endian only.

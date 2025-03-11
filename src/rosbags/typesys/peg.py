@@ -193,7 +193,7 @@ class RuleSequence(Rule):
 
 
 class RuleZeroPlus(Rule):
-    """Rule to match zero or more occurences of subrule."""
+    """Rule to match zero or more occurrences of subrule."""
 
     value: Rule
 
@@ -211,7 +211,7 @@ class RuleZeroPlus(Rule):
 
 
 class RuleOnePlus(Rule):
-    """Rule to match one or more occurences of subrule."""
+    """Rule to match one or more occurrences of subrule."""
 
     value: Rule
 
@@ -232,7 +232,7 @@ class RuleOnePlus(Rule):
 
 
 class RuleZeroOne(Rule):
-    """Rule to match zero or one occurence of subrule."""
+    """Rule to match zero or one occurrence of subrule."""
 
     value: Rule
 
