@@ -154,6 +154,13 @@ PARSER.add_argument(
     type=Path,
 )
 PARSER.add_argument(
+    '--dst-storage',
+    choices=['sqlite3', 'mcap'],
+    help="Destination file storage backend. (default='sqlite3')",
+    dest='dst_storage',
+    type=str,
+)
+PARSER.add_argument(
     '--dst-version',
     help='Destination file format version. (default=8)',
     dest='dst_version',
@@ -168,7 +175,7 @@ PARSER.add_argument(
 )
 PARSER.add_argument(
     '--compress-mode',
-    choices=['file', 'message'],
+    choices=['file', 'message', 'storage'],
     help="Compression mode for rosbag2. (default='file')",
     dest='compress_mode',
     type=str,
@@ -481,6 +488,7 @@ def main() -> NoReturn:  # pragma: no cover
         if k in {
             'srcs',
             'dst',
+            'dst_storage',
             'dst_version',
             'compress',
             'compress_mode',

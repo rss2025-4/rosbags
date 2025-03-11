@@ -47,6 +47,13 @@ def command(
         },
     ],
     dst: Annotated[Path, {'flags': ['--dst']}],
+    dst_storage: Annotated[
+        str,
+        {
+            'flags': ['--dst-storage'],
+            'choices': ['sqlite3', 'mcap'],
+        },
+    ] = 'sqlite3',
     dst_version: Annotated[int, {'flags': ['--dst-version']}] = 8,
     compress: Annotated[
         str,
@@ -59,7 +66,7 @@ def command(
         str,
         {
             'flags': ['--compress-mode'],
-            'choices': ['file', 'message'],
+            'choices': ['file', 'message', 'storage'],
         },
     ] = 'file',
     src_typestore: Annotated[
@@ -182,6 +189,7 @@ def command(
     Args:
         srcs: Rosbag files to read from.
         dst: Destination path to write rosbag to.
+        dst_storage: Destination file storage backend.
         dst_version: Destination file format version.
         compress: Compression algorithm.
             Rosbag1 supports 'bz2' or 'lz4'.
@@ -250,6 +258,7 @@ def command(
         convert(
             srcs,
             dst,
+            dst_storage,
             dst_version,
             compress if compress != 'none' else None,
             compress_mode,

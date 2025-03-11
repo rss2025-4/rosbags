@@ -27,6 +27,7 @@ from rosbags.rosbag1 import (
     WriterError as WriterError1,
 )
 from rosbags.rosbag2 import (
+    StoragePlugin,
     Writer as Writer2,
     WriterError as WriterError2,
 )
@@ -406,7 +407,8 @@ def create_connections_converters(
 def convert(
     srcs: Sequence[Path],
     dst: Path,
-    dst_version: int | None,
+    dst_storage: str,
+    dst_version: int,
     compress: str | None,
     compress_mode: str,
     default_typestore: Typestore | None,
@@ -421,6 +423,7 @@ def convert(
     Args:
         srcs: Rosbag files to read from.
         dst: Destination path to write rosbag to.
+        dst_storage: Destination file storage backend.
         dst_version: Destination file format version.
         compress: Compression algorithm ``bz2`` or ``lz4`` for rosbag1,
             ``zstd`` for rosbag2.
@@ -440,7 +443,12 @@ def convert(
         writer: Writer1 | Writer2
         is2 = dst.suffix != '.bag'
         if is2:
-            writer = Writer2(dst, version=cast('Literal[8, 9]', dst_version or 8))
+            storage_plugin = StoragePlugin.MCAP if dst_storage == 'mcap' else StoragePlugin.SQLITE3
+            writer = Writer2(
+                dst,
+                version=cast('Literal[8, 9]', dst_version),
+                storage_plugin=storage_plugin,
+            )
             if compress:
                 writer.set_compression(
                     writer.CompressionMode[compress_mode.upper()],

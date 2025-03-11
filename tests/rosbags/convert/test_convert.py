@@ -69,7 +69,7 @@ def test_convert_reader_errors(tmp_path: Path) -> None:
         patch('rosbags.convert.converter.AnyReader', side_effect=AnyReaderError('exc')),
         pytest.raises(ConverterError, match='Reading source bag: exc'),
     ):
-        convert([], tmp_path / 'foo', None, None, 'file', None, None, (), (), (), ())
+        convert([], tmp_path / 'foo', 'sqlite3', 8, None, 'file', None, None, (), (), (), ())
 
 
 def test_convert_writer_errors(tmp_path: Path) -> None:
@@ -78,13 +78,13 @@ def test_convert_writer_errors(tmp_path: Path) -> None:
         patch('rosbags.convert.converter.Writer2', side_effect=WriterError2('exc')),
         pytest.raises(ConverterError, match='Writing destination bag: exc'),
     ):
-        convert([], tmp_path / 'foo', None, None, 'file', None, None, (), (), (), ())
+        convert([], tmp_path / 'foo', 'sqlite3', 8, None, 'file', None, None, (), (), (), ())
 
     with (
         patch('rosbags.convert.converter.Writer1', side_effect=WriterError1('exc')),
         pytest.raises(ConverterError, match='Writing destination bag: exc'),
     ):
-        convert([], tmp_path / 'foo.bag', None, None, 'file', None, None, (), (), (), ())
+        convert([], tmp_path / 'foo.bag', 'sqlite3', 8, None, 'file', None, None, (), (), (), ())
 
 
 def test_convert_forwards_exceptions(tmp_path: Path) -> None:
@@ -93,7 +93,7 @@ def test_convert_forwards_exceptions(tmp_path: Path) -> None:
         patch('rosbags.convert.converter.AnyReader', side_effect=KeyError('exc')),
         pytest.raises(ConverterError, match="Converting rosbag: KeyError\\('exc'\\)"),
     ):
-        convert([], tmp_path / 'foo', None, None, 'file', None, None, (), (), (), ())
+        convert([], tmp_path / 'foo', 'sqlite3', 8, None, 'file', None, None, (), (), (), ())
 
 
 def test_convert_enables_compression(tmp_path: Path) -> None:
@@ -102,28 +102,28 @@ def test_convert_enables_compression(tmp_path: Path) -> None:
         patch('rosbags.convert.converter.AnyReader'),
         patch('rosbags.convert.converter.Writer1') as writer,
     ):
-        convert([], tmp_path / 'foo.bag', None, None, 'file', None, None, (), (), (), ())
+        convert([], tmp_path / 'foo.bag', 'sqlite3', 8, None, 'file', None, None, (), (), (), ())
     writer.return_value.set_compression.assert_not_called()
 
     with (
         patch('rosbags.convert.converter.AnyReader'),
         patch('rosbags.convert.converter.Writer1') as writer,
     ):
-        convert([], tmp_path / 'foo.bag', None, 'bz2', 'file', None, None, (), (), (), ())
+        convert([], tmp_path / 'foo.bag', 'sqlite3', 8, 'bz2', 'file', None, None, (), (), (), ())
     writer.return_value.set_compression.assert_called()
 
     with (
         patch('rosbags.convert.converter.AnyReader'),
         patch('rosbags.convert.converter.Writer2') as writer,
     ):
-        convert([], tmp_path / 'foo', None, None, 'file', None, None, (), (), (), ())
+        convert([], tmp_path / 'foo', 'sqlite3', 8, None, 'file', None, None, (), (), (), ())
     writer.return_value.set_compression.assert_not_called()
 
     with (
         patch('rosbags.convert.converter.AnyReader'),
         patch('rosbags.convert.converter.Writer2') as writer,
     ):
-        convert([], tmp_path / 'foo', None, 'zstd', 'file', None, None, (), (), (), ())
+        convert([], tmp_path / 'foo', 'sqlite3', 8, 'zstd', 'file', None, None, (), (), (), ())
     writer.return_value.set_compression.assert_called()
 
 
@@ -135,7 +135,7 @@ def test_convert_connection_filtering(tmp_path: Path) -> None:
         patch('rosbags.convert.converter.create_connections_converters') as ccc,
     ):
         reader.return_value.__enter__.return_value.connections = []
-        convert([], tmp_path, None, None, 'file', None, None, (), (), (), ())
+        convert([], tmp_path, 'sqlite3', 8, None, 'file', None, None, (), (), (), ())
     ccc.assert_not_called()
 
     with (
@@ -151,27 +151,31 @@ def test_convert_connection_filtering(tmp_path: Path) -> None:
         conn.msgtype = 'bar'
         reader.return_value.__enter__.return_value.connections = [conn]
         with pytest.raises(ConverterError):
-            convert([], tmp_path, None, None, 'file', None, None, (), (), (), ())
+            convert([], tmp_path, 'sqlite3', 8, None, 'file', None, None, (), (), (), ())
         ccc.reset_mock()
 
         with pytest.raises(ConverterError):
-            convert([], tmp_path, None, None, 'file', None, None, (), ('foo'), (), ('unknown'))
+            convert(
+                [], tmp_path, 'sqlite3', 8, None, 'file', None, None, (), ('foo'), (), ('unknown')
+            )
         ccc.reset_mock()
 
         with pytest.raises(ConverterError):
-            convert([], tmp_path, None, None, 'file', None, None, (), ('unknown'), (), ('bar'))
+            convert(
+                [], tmp_path, 'sqlite3', 8, None, 'file', None, None, (), ('unknown'), (), ('bar')
+            )
         ccc.reset_mock()
 
-        convert([], tmp_path, None, None, 'file', None, None, ('foo'), (), (), ())
+        convert([], tmp_path, 'sqlite3', 8, None, 'file', None, None, ('foo'), (), (), ())
         ccc.assert_not_called()
 
-        convert([], tmp_path, None, None, 'file', None, None, (), (), ('bar'), ())
+        convert([], tmp_path, 'sqlite3', 8, None, 'file', None, None, (), (), ('bar'), ())
         ccc.assert_not_called()
 
-        convert([], tmp_path, None, None, 'file', None, None, (), ('unknown'), (), ())
+        convert([], tmp_path, 'sqlite3', 8, None, 'file', None, None, (), ('unknown'), (), ())
         ccc.assert_not_called()
 
-        convert([], tmp_path, None, None, 'file', None, None, (), (), (), ('unknown'))
+        convert([], tmp_path, 'sqlite3', 8, None, 'file', None, None, (), (), (), ('unknown'))
         ccc.assert_not_called()
 
 
@@ -197,7 +201,7 @@ def test_convert_applies_transforms(tmp_path: Path) -> None:
             {'bar': lambda x: x * 2},  # pyright: ignore[reportUnknownLambdaType]
         ]
 
-        convert([], tmp_path, None, None, 'file', None, None, (), (), (), ())
+        convert([], tmp_path, 'sqlite3', 8, None, 'file', None, None, (), (), (), ())
 
         writer.return_value.write.assert_called_with(666, 1, 4)
 
