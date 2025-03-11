@@ -3,6 +3,16 @@
 Changes
 =======
 
+0.10.9 - 2025-03-11
+-------------------
+
+- Properly represent the Empty message type `#109`_
+- Add MCAP writer, support conversion to rosbag2 with MCAP storage `#97`_
+
+.. _#97: https://gitlab.com/ternaris/rosbags/issues/97
+.. _#108: https://gitlab.com/ternaris/rosbags/issues/109
+
+
 0.10.8 - 2025-02-26
 -------------------
 
