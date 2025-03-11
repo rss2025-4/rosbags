@@ -91,7 +91,7 @@ class Metadata(TypedDict):
     compression_mode: str
     topics_with_message_count: list[TopicWithMessageCount]
     files: list[FileInformation]
-    custom_data: dict[str, str]
+    custom_data: dict[str, str] | None
     ros_distro: str
 
 

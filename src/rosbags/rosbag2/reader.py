@@ -167,7 +167,7 @@ class Reader:
                 raise ReaderError(msg)
 
             self.files: list[FileInformation] = self.metadata.get('files', [])[:]
-            self.custom_data: dict[str, str] = self.metadata.get('custom_data', {})
+            self.custom_data: dict[str, str] | None = self.metadata.get('custom_data')
 
             self.tmpdir: TemporaryDirectory[str] | None = None
             self.storage: StorageReader | None = None

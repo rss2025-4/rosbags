@@ -18,6 +18,7 @@ from lz4.frame import decompress as lz4_decompress  # type: ignore[import-untype
 
 from rosbags.interfaces import MessageDefinition, MessageDefinitionFormat
 
+from .enums import CompressionMode
 from .errors import ReaderError
 
 if TYPE_CHECKING:
@@ -658,7 +659,7 @@ class PendingChunk:
 class McapWriter:
     """Mcap Storage Writer."""
 
-    def __init__(self, path: Path) -> None:
+    def __init__(self, path: Path, compression: CompressionMode) -> None:
         """Initialize sqlite3 storage."""
         self.path = path / f'{path.name}.mcap'
         self.bio = self.path.open('xb')
@@ -673,14 +674,14 @@ class McapWriter:
         self.channels: list[Channel] = []
         self.chunks: list[BytesIO] = []
         self.chunk = PendingChunk(2**63 - 1, 0, BytesIO(), defaultdict(list))
-        self.compression = ''
-        self.compressor: Callable[[bytes], bytes] = lambda x: x
 
-    def set_compression(self, compression: str) -> None:
-        """Enable compression."""
-        assert compression == 'zstd'
-        self.compression = 'zstd'
-        self.compressor = zstandard.ZstdCompressor().compress
+        self.compressor: Callable[[bytes], bytes]
+        if compression == CompressionMode.STORAGE:
+            self.compression = 'zstd'
+            self.compressor = zstandard.ZstdCompressor().compress
+        else:
+            self.compression = ''
+            self.compressor = lambda x: x
 
     def add_msgtype(self, connection: Connection) -> None:
         """Add a msgtype.

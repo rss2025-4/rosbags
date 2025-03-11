@@ -193,6 +193,7 @@ def test_empty_bag(empty_bag: Path) -> None:
         assert reader.end_time == 0
         assert reader.duration == 0
         assert not list(reader.messages())
+        assert reader.custom_data
         assert reader.custom_data['key1'] == 'value1'
         assert reader.custom_data['key2'] == 'value2'
         assert reader.ros_distro == 'rosbags'

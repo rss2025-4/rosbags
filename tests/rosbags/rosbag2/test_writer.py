@@ -14,7 +14,7 @@ from rosbags.interfaces import (
     MessageDefinition,
     MessageDefinitionFormat,
 )
-from rosbags.rosbag2 import Writer, WriterError
+from rosbags.rosbag2 import CompressionFormat, CompressionMode, Writer, WriterError
 from rosbags.typesys import Stores, get_typestore
 
 if TYPE_CHECKING:
@@ -36,7 +36,7 @@ def test_writer_writes_storage_and_metadata(tmp_path: Path) -> None:
 
     path = tmp_path / 'compress_none'
     bag = Writer(path, version=Writer.VERSION_LATEST)
-    bag.set_compression(bag.CompressionMode.NONE, bag.CompressionFormat.ZSTD)
+    bag.set_compression(CompressionMode.NONE, CompressionFormat.ZSTD)
     with bag:
         connection = bag.add_connection('/test', 'std_msgs/msg/Int8', typestore=store)
         bag.write(connection, 42, b'\x00')
@@ -47,7 +47,7 @@ def test_writer_writes_storage_and_metadata(tmp_path: Path) -> None:
 
     path = tmp_path / 'compress_file'
     bag = Writer(path, version=Writer.VERSION_LATEST)
-    bag.set_compression(bag.CompressionMode.FILE, bag.CompressionFormat.ZSTD)
+    bag.set_compression(CompressionMode.FILE, CompressionFormat.ZSTD)
     with bag:
         connection = bag.add_connection('/test', 'std_msgs/msg/Int8', typestore=store)
         bag.write(connection, 42, b'\x00')
@@ -58,7 +58,7 @@ def test_writer_writes_storage_and_metadata(tmp_path: Path) -> None:
 
     path = tmp_path / 'compress_message'
     bag = Writer(path, version=Writer.VERSION_LATEST)
-    bag.set_compression(bag.CompressionMode.MESSAGE, bag.CompressionFormat.ZSTD)
+    bag.set_compression(CompressionMode.MESSAGE, CompressionFormat.ZSTD)
     with bag:
         connection = bag.add_connection('/test', 'std_msgs/msg/Int8', typestore=store)
         bag.write(connection, 42, b'\x00')
@@ -126,7 +126,7 @@ def test_failure_cases(tmp_path: Path) -> None:
     bag = Writer(tmp_path / 'compress_after_open', version=Writer.VERSION_LATEST)
     bag.open()
     with pytest.raises(WriterError, match='already open'):
-        bag.set_compression(bag.CompressionMode.FILE, bag.CompressionFormat.ZSTD)
+        bag.set_compression(CompressionMode.FILE, CompressionFormat.ZSTD)
 
     bag = Writer(tmp_path / 'topic', version=Writer.VERSION_LATEST)
     with pytest.raises(WriterError, match='was not opened'):
@@ -195,3 +195,16 @@ def test_deprecations(tmp_path: Path) -> None:
             typestore=typestore,
             offered_qos_profiles='',
         )
+
+    with pytest.deprecated_call():
+        _ = Writer.CompressionMode
+
+    with pytest.deprecated_call():
+        _ = Writer.CompressionFormat
+
+    writer = Writer(tmp_path / 'foo', version=Writer.VERSION_LATEST)
+    with pytest.deprecated_call():
+        _ = writer.CompressionMode
+
+    with pytest.deprecated_call():
+        _ = writer.CompressionFormat

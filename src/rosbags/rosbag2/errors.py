@@ -9,3 +9,9 @@ class ReaderError(Exception):
     """Reader Error."""
 
     args: tuple[str]
+
+
+class WriterError(Exception):
+    """Writer Error."""
+
+    args: tuple[str]

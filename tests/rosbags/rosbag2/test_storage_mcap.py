@@ -14,6 +14,7 @@ from rosbags.interfaces import (
     MessageDefinition,
     MessageDefinitionFormat,
 )
+from rosbags.rosbag2.enums import CompressionMode
 from rosbags.rosbag2.storage_mcap import MCAPFile, McapWriter
 
 if TYPE_CHECKING:
@@ -25,7 +26,7 @@ def test_write_empty(tmp_path: Path) -> None:
     bag = tmp_path / 'bag'
     bag.mkdir()
 
-    mcap = McapWriter(bag)
+    mcap = McapWriter(bag, CompressionMode.NONE)
     mcap.close(0, 'metadata')
 
     reader = MCAPFile(bag / 'bag.mcap')
@@ -39,7 +40,7 @@ def test_write_schema(tmp_path: Path) -> None:
     bag = tmp_path / 'bag'
     bag.mkdir()
 
-    mcap = McapWriter(bag)
+    mcap = McapWriter(bag, CompressionMode.NONE)
     connection = Connection(
         1,
         'topic',
@@ -66,7 +67,7 @@ def test_write_channel(tmp_path: Path) -> None:
     bag = tmp_path / 'bag'
     bag.mkdir()
 
-    mcap = McapWriter(bag)
+    mcap = McapWriter(bag, CompressionMode.NONE)
     connection = Connection(
         1,
         'topic',
@@ -94,7 +95,7 @@ def test_write_message(tmp_path: Path) -> None:
     bag = tmp_path / 'bag'
     bag.mkdir()
 
-    mcap = McapWriter(bag)
+    mcap = McapWriter(bag, CompressionMode.NONE)
     connection = Connection(
         1,
         'topic',
@@ -123,15 +124,13 @@ def test_write_message(tmp_path: Path) -> None:
     reader.close()
 
 
-@pytest.mark.parametrize('compression', ['', 'zstd'])
+@pytest.mark.parametrize('compression', ['none', 'storage'])
 def test_write_multichunk(tmp_path: Path, compression: str) -> None:
     """Test schema version is detected."""
     bag = tmp_path / 'bag'
     bag.mkdir()
 
-    mcap = McapWriter(bag)
-    if compression:
-        mcap.set_compression(compression)
+    mcap = McapWriter(bag, CompressionMode[compression.upper()])
     connection = Connection(
         1,
         'topic',
@@ -154,7 +153,7 @@ def test_write_multichunk(tmp_path: Path, compression: str) -> None:
 
     (bag / 'bag.mcap').unlink()
 
-    mcap = McapWriter(bag)
+    mcap = McapWriter(bag, CompressionMode.NONE)
     mcap.add_msgtype(connection)
     mcap.add_connection(connection, 'qos')
     mcap.write(connection, 42, b'\x00' * 2**20)

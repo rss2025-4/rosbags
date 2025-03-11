@@ -8,10 +8,11 @@ import sqlite3
 from typing import TYPE_CHECKING, cast
 
 from rosbags.interfaces import MessageDefinition, MessageDefinitionFormat
+from rosbags.rosbag2.enums import CompressionMode
 from rosbags.typesys.msg import get_types_from_msg
 from rosbags.typesys.store import Typestore
 
-from .errors import ReaderError
+from .errors import ReaderError, WriterError
 
 if TYPE_CHECKING:
     from collections.abc import Generator, Iterable
@@ -223,8 +224,12 @@ class Sqlite3Writer:
     INSERT INTO schema(schema_version, ros_distro) VALUES (4, 'rosbags');
     """
 
-    def __init__(self, path: Path) -> None:
+    def __init__(self, path: Path, compression: CompressionMode) -> None:
         """Initialize sqlite3 storage."""
+        if compression == CompressionMode.STORAGE:
+            msg = 'SQLITE3 writer does not support storage-side compression.'
+            raise WriterError(msg)
+
         self.path = path / f'{path.name}.db3'
         self.conn = sqlite3.connect(f'file:{self.path}', uri=True)
         _ = self.conn.executescript(self.SQLITE_SCHEMA)

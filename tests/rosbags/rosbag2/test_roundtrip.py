@@ -8,7 +8,8 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from rosbags.rosbag2 import Reader, Writer
+from rosbags.rosbag2 import CompressionMode, Reader, Writer, WriterError
+from rosbags.rosbag2.enums import CompressionFormat
 from rosbags.typesys import Stores, get_typestore
 from rosbags.typesys.stores.latest import std_msgs__msg__Float64 as Float64
 
@@ -16,8 +17,8 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 
-@pytest.mark.parametrize('mode', [*Writer.CompressionMode])
-def test_roundtrip(mode: Writer.CompressionMode, tmp_path: Path) -> None:
+@pytest.mark.parametrize('mode', [*CompressionMode])
+def test_roundtrip(mode: CompressionMode, tmp_path: Path) -> None:
     """Test messages stay the same between write and read."""
     store = get_typestore(Stores.LATEST)
 
@@ -25,7 +26,12 @@ def test_roundtrip(mode: Writer.CompressionMode, tmp_path: Path) -> None:
 
     path = tmp_path / 'rosbag2'
     wbag = Writer(path, version=Writer.VERSION_LATEST)
-    wbag.set_compression(mode, wbag.CompressionFormat.ZSTD)
+    wbag.set_compression(mode, CompressionFormat.ZSTD)
+    if mode == CompressionMode.STORAGE:
+        with pytest.raises(WriterError, match='storage-side compression'):
+            wbag.open()
+        return
+
     with wbag:
         wconnection = wbag.add_connection('/test', float64.__msgtype__, typestore=store)
         wbag.write(wconnection, 42, store.serialize_cdr(float64, float64.__msgtype__))

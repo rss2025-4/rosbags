@@ -7,7 +7,6 @@
 from __future__ import annotations
 
 import warnings
-from enum import IntEnum, auto
 from io import StringIO
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -26,6 +25,9 @@ from rosbags.rosbag2.metadata import dump_qos_v8, dump_qos_v9, parse_qos
 from rosbags.rosbag2.storage_mcap import McapWriter
 from rosbags.rosbag2.storage_sqlite3 import Sqlite3Writer
 from rosbags.typesys import Stores, get_typestore
+
+from .enums import CompressionFormat, CompressionMode, StoragePlugin
+from .errors import WriterError
 
 if TYPE_CHECKING:
     import sys
@@ -47,7 +49,7 @@ if TYPE_CHECKING:
 
         path: Path
 
-        def __init__(self, path: Path) -> None:
+        def __init__(self, path: Path, compression: CompressionMode) -> None:
             """Initialize."""
             raise NotImplementedError
 
@@ -66,11 +68,31 @@ if TYPE_CHECKING:
             """Close rosbag2 after writing."""
 
 
-class WriterError(Exception):
-    """Writer Error."""
+class DeprecationMeta(type):
+    """Deprecation Meta Class."""
+
+    def __getattr__(cls, name: str):  # type: ignore[no-untyped-def]  # noqa: ANN204
+        """Deprecate enum members."""
+        if name == 'CompressionMode':
+            warnings.warn(
+                'CompressionMode should be imported from rosbags.rosbag2.',
+                category=DeprecationWarning,
+                stacklevel=2,
+            )
+            return CompressionMode
+
+        if name == 'CompressionFormat':
+            warnings.warn(
+                'CompressionFormat should be imported from rosbags.rosbag2.',
+                category=DeprecationWarning,
+                stacklevel=2,
+            )
+            return CompressionFormat
+        msg = f'{cls.__name__!r} object has no attribute {name!r}'
+        raise AttributeError(msg)
 
 
-class Writer:
+class Writer(metaclass=DeprecationMeta):
     """Rosbag2 writer.
 
     This class implements writing of rosbag2 files in version 8 or 9. It
@@ -78,27 +100,9 @@ class Writer:
 
     """
 
-    class StoragePlugin(IntEnum):
-        """Storage Plugins."""
-
-        SQLITE3 = auto()
-        MCAP = auto()
-
-    class CompressionMode(IntEnum):
-        """Compession modes."""
-
-        NONE = auto()
-        FILE = auto()
-        MESSAGE = auto()
-
-    class CompressionFormat(IntEnum):
-        """Compession formats."""
-
-        ZSTD = auto()
-
     VERSION_LATEST: Literal[9] = 9
 
-    STORAGE_PLUGINS: Mapping[Writer.StoragePlugin, type[StorageWriter]] = {
+    STORAGE_PLUGINS: Mapping[StoragePlugin, type[StorageWriter]] = {
         StoragePlugin.SQLITE3: Sqlite3Writer,
         StoragePlugin.MCAP: McapWriter,
     }
@@ -108,7 +112,7 @@ class Writer:
         path: Path | str,
         *,
         version: Literal[8, 9] | None = None,
-        storage_plugin: Writer.StoragePlugin = StoragePlugin.SQLITE3,
+        storage_plugin: StoragePlugin = StoragePlugin.SQLITE3,
     ) -> None:
         """Initialize writer.
 
@@ -139,7 +143,7 @@ class Writer:
         self.version = version
         self.storage_plugin = storage_plugin
 
-        self.compression_mode = ''
+        self.compression_mode = CompressionMode.NONE
         self.compression_format = ''
         self.compressor: zstandard.ZstdCompressor | None = None
 
@@ -151,7 +155,7 @@ class Writer:
         self.min_timestamp = 2**63 - 1
         self.max_timestamp = 0
 
-    def set_compression(self, mode: Writer.CompressionMode, fmt: Writer.CompressionFormat) -> None:
+    def set_compression(self, mode: CompressionMode, fmt: CompressionFormat) -> None:
         """Enable compression on bag.
 
         This function has to be called before opening.
@@ -167,9 +171,9 @@ class Writer:
         if self.storage:
             msg = f'Cannot set compression, bag {self.path} already open.'
             raise WriterError(msg)
-        if mode == self.CompressionMode.NONE:
+        if mode == CompressionMode.NONE:
             return
-        self.compression_mode = mode.name.lower()
+        self.compression_mode = mode
         self.compression_format = fmt.name.lower()
         self.compressor = zstandard.ZstdCompressor()
 
@@ -201,7 +205,7 @@ class Writer:
             msg = f'{self.path} exists already, not overwriting.'
             raise WriterError(msg) from None
 
-        self.storage = self.STORAGE_PLUGINS[self.storage_plugin](self.path)
+        self.storage = self.STORAGE_PLUGINS[self.storage_plugin](self.path, self.compression_mode)
 
     def add_connection(
         self,
@@ -327,7 +331,7 @@ class Writer:
             msg = f'Tried to write to unknown connection {connection!r}.'
             raise WriterError(msg)
 
-        if self.compression_mode == 'message':
+        if self.compression_mode == CompressionMode.MESSAGE:
             assert self.compressor
             data = self.compressor.compress(data)
 
@@ -344,14 +348,26 @@ class Writer:
         """
         assert self.storage
 
+        compression_mode = (
+            ''
+            if self.compression_mode in {CompressionMode.NONE, CompressionMode.STORAGE}
+            else self.compression_mode.name.lower()
+        )
+
+        compression_format = (
+            ''
+            if self.compression_mode in {CompressionMode.NONE, CompressionMode.STORAGE}
+            else self.compression_format
+        )
+
         path = self.storage.path
         dst = (
-            path.with_suffix(f'{path.suffix}.{self.compression_format}')
-            if self.compression_mode == 'file'
+            path.with_suffix(f'{path.suffix}.{compression_format}')
+            if self.compression_mode == CompressionMode.FILE
             else path
         )
 
-        duration = self.max_timestamp - self.min_timestamp
+        duration = max(0, self.max_timestamp - self.min_timestamp)
         start = self.min_timestamp
         count = sum(self.counts.values())
 
@@ -379,8 +395,8 @@ class Writer:
                     for x in self.connections
                     if isinstance(x.ext, ConnectionExtRosbag2)
                 ],
-                'compression_format': self.compression_format,
-                'compression_mode': self.compression_mode,
+                'compression_format': compression_format,
+                'compression_mode': compression_mode,
                 'files': [
                     {
                         'path': dst.name,
@@ -389,7 +405,7 @@ class Writer:
                         'message_count': count,
                     },
                 ],
-                'custom_data': self.custom_data,
+                'custom_data': self.custom_data or None,
                 'ros_distro': 'rosbags',
             },
         }
@@ -406,7 +422,7 @@ class Writer:
         self.storage.close(self.version, metastr.getvalue().strip())
         self.storage = None
 
-        if self.compression_mode == 'file':
+        if self.compression_mode == CompressionMode.FILE:
             assert self.compressor
             with path.open('rb') as infile, dst.open('wb') as outfile:
                 _ = self.compressor.copy_stream(infile, outfile)
@@ -426,3 +442,11 @@ class Writer:
         """Close rosbag2 when exiting contextmanager."""
         self.close()
         return False
+
+    def __getattribute__(self, name: str):  # type: ignore[no-untyped-def]  # noqa: ANN204
+        """Deprecate enums."""
+        if name == 'CompressionMode':
+            return Writer.CompressionMode
+        if name == 'CompressionFormat':
+            return Writer.CompressionFormat
+        return super().__getattribute__(name)
