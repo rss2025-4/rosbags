@@ -13,6 +13,8 @@ from typing import TYPE_CHECKING, NamedTuple, cast
 import zstandard
 from lz4.frame import decompress as lz4_decompress  # type: ignore[import-untyped]
 
+from rosbags.interfaces import MessageDefinition, MessageDefinitionFormat
+
 from .errors import ReaderError
 
 if TYPE_CHECKING:
@@ -364,11 +366,18 @@ class MCAPFile:
                 bio = self.bio
                 bio_size = self.data_end
 
-    def get_schema_definitions(self) -> dict[str, tuple[str, str]]:
+    def get_schema_definitions(self) -> dict[str, MessageDefinition]:
         """Get schema definition."""
         if not self.schemas:
             self.meta_scan()
-        return {schema.name: (schema.encoding[4:], schema.data) for schema in self.schemas.values()}
+        fmtmap = {
+            'ros2msg': MessageDefinitionFormat.MSG,
+            'ros2idl': MessageDefinitionFormat.IDL,
+        }
+        return {
+            schema.name: MessageDefinition(fmtmap[schema.encoding], schema.data)
+            for schema in self.schemas.values()
+        }
 
     def messages_scan(
         self,
@@ -523,7 +532,7 @@ class MCAPFile:
             yield connection, timestamp, data
 
 
-class ReaderMcap:
+class McapReader:
     """Mcap storage reader."""
 
     def __init__(self, paths: Iterable[Path], connections: Iterable[Connection]) -> None:
@@ -551,9 +560,9 @@ class ReaderMcap:
             reader.close()
         self.readers = []
 
-    def get_definitions(self) -> dict[str, tuple[str, str]]:
+    def get_definitions(self) -> dict[str, MessageDefinition]:
         """Get message definitions."""
-        res: dict[str, tuple[str, str]] = {}
+        res: dict[str, MessageDefinition] = {}
         for reader in self.readers:
             res.update(reader.get_schema_definitions())
         return res

@@ -11,7 +11,12 @@ from unittest.mock import patch
 import pytest
 
 from rosbags.highlevel import AnyReader, AnyReaderError
-from rosbags.interfaces import Connection, ConnectionExtRosbag2
+from rosbags.interfaces import (
+    Connection,
+    ConnectionExtRosbag2,
+    MessageDefinition,
+    MessageDefinitionFormat,
+)
 from rosbags.rosbag1 import Writer as Writer1
 from rosbags.rosbag2 import Writer as Writer2
 from rosbags.typesys import Stores, get_typestore
@@ -167,7 +172,7 @@ def test_anyreader2(bags2: list[Path], *, strip_types: bool) -> None:
         'AbstractContextManager[None]',
         (
             patch(
-                'rosbags.rosbag2.storage_sqlite3.ReaderSqlite3.get_definitions',
+                'rosbags.rosbag2.storage_sqlite3.Sqlite3Reader.get_definitions',
                 return_value={},
             )
             if strip_types
@@ -251,7 +256,7 @@ def test_anyreader2_autoregister(bags2: list[Path]) -> None:
                     1,
                     '/foo',
                     'test_msg/msg/Foo',
-                    'string foo',
+                    MessageDefinition(MessageDefinitionFormat.MSG, 'string foo'),
                     'msg',
                     0,
                     ConnectionExtRosbag2('', []),
@@ -261,9 +266,10 @@ def test_anyreader2_autoregister(bags2: list[Path]) -> None:
                     2,
                     '/bar',
                     'test_msg/msg/Bar',
-                    (
+                    MessageDefinition(
+                        MessageDefinitionFormat.MSG,
                         f'{"=" * 80}\nIDL: test_msg/msg/Bar\n'
-                        'module test_msgs { module msg { struct Bar {string bar;}; }; };'
+                        'module test_msgs { module msg { struct Bar {string bar;}; }; };',
                     ),
                     'idl',
                     0,
@@ -274,7 +280,7 @@ def test_anyreader2_autoregister(bags2: list[Path]) -> None:
                     3,
                     '/baz',
                     'test_msg/msg/Baz',
-                    '',
+                    MessageDefinition(MessageDefinitionFormat.NONE, ''),
                     '',
                     0,
                     ConnectionExtRosbag2('', []),
@@ -311,7 +317,7 @@ def test_deprecations(bags2: list[Path]) -> None:
                     1,
                     '/foo',
                     'test_msg/msg/Foo',
-                    '',
+                    MessageDefinition(MessageDefinitionFormat.NONE, ''),
                     '',
                     0,
                     ConnectionExtRosbag2('', []),

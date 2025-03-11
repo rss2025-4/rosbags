@@ -14,12 +14,18 @@ import zstandard
 from ruamel.yaml import YAML
 from ruamel.yaml.error import YAMLError
 
-from rosbags.interfaces import Connection, ConnectionExtRosbag2, TopicInfo
+from rosbags.interfaces import (
+    Connection,
+    ConnectionExtRosbag2,
+    MessageDefinition,
+    MessageDefinitionFormat,
+    TopicInfo,
+)
 from rosbags.rosbag2.metadata import parse_qos
 
 from .errors import ReaderError
-from .storage_mcap import ReaderMcap
-from .storage_sqlite3 import ReaderSqlite3
+from .storage_mcap import McapReader
+from .storage_sqlite3 import Sqlite3Reader
 
 if TYPE_CHECKING:
     import sys
@@ -34,34 +40,33 @@ if TYPE_CHECKING:
 
     from .metadata import FileInformation, Metadata
 
+    class StorageReader(Protocol):
+        """Storage Protocol."""
 
-class StorageProtocol(Protocol):
-    """Storage Protocol."""
+        def __init__(self, paths: Iterable[Path], connections: Iterable[Connection]) -> None:
+            """Initialize."""
+            raise NotImplementedError  # pragma: no cover
 
-    def __init__(self, paths: Iterable[Path], connections: Iterable[Connection]) -> None:
-        """Initialize."""
-        raise NotImplementedError  # pragma: no cover
+        def open(self) -> None:
+            """Open file."""
+            raise NotImplementedError  # pragma: no cover
 
-    def open(self) -> None:
-        """Open file."""
-        raise NotImplementedError  # pragma: no cover
+        def close(self) -> None:
+            """Close file."""
+            raise NotImplementedError  # pragma: no cover
 
-    def close(self) -> None:
-        """Close file."""
-        raise NotImplementedError  # pragma: no cover
+        def get_definitions(self) -> dict[str, MessageDefinition]:
+            """Get message definitions."""
+            raise NotImplementedError  # pragma: no cover
 
-    def get_definitions(self) -> dict[str, tuple[str, str]]:
-        """Get message definitions."""
-        raise NotImplementedError  # pragma: no cover
-
-    def messages(
-        self,
-        connections: Iterable[Connection] = (),
-        start: int | None = None,
-        stop: int | None = None,
-    ) -> Generator[tuple[Connection, int, bytes], None, None]:
-        """Get messages from file."""
-        raise NotImplementedError  # pragma: no cover
+        def messages(
+            self,
+            connections: Iterable[Connection] = (),
+            start: int | None = None,
+            stop: int | None = None,
+        ) -> Generator[tuple[Connection, int, bytes], None, None]:
+            """Get messages from file."""
+            raise NotImplementedError  # pragma: no cover
 
 
 class Reader:
@@ -84,9 +89,9 @@ class Reader:
 
     """
 
-    STORAGE_PLUGINS: Mapping[str, type[StorageProtocol]] = {
-        'mcap': ReaderMcap,
-        'sqlite3': ReaderSqlite3,
+    STORAGE_PLUGINS: Mapping[str, type[StorageReader]] = {
+        'mcap': McapReader,
+        'sqlite3': Sqlite3Reader,
     }
 
     def __init__(self, path: Path | str) -> None:
@@ -134,7 +139,7 @@ class Reader:
                     id=idx + 1,
                     topic=x['topic_metadata']['name'],
                     msgtype=x['topic_metadata']['type'],
-                    msgdef='',
+                    msgdef=MessageDefinition(MessageDefinitionFormat.NONE, ''),
                     digest=x['topic_metadata'].get('type_description_hash', ''),
                     msgcount=x['message_count'],
                     ext=ConnectionExtRosbag2(
@@ -165,7 +170,7 @@ class Reader:
             self.custom_data: dict[str, str] = self.metadata.get('custom_data', {})
 
             self.tmpdir: TemporaryDirectory[str] | None = None
-            self.storage: StorageProtocol | None = None
+            self.storage: StorageReader | None = None
         except KeyError as exc:
             msg = f'A metadata key is missing {exc!r}.'
             raise ReaderError(msg) from None
@@ -240,7 +245,7 @@ class Reader:
                     id=conn.id,
                     topic=conn.topic,
                     msgtype=conn.msgtype,
-                    msgdef=desc[1],
+                    msgdef=desc,
                     digest=conn.digest,
                     msgcount=conn.msgcount,
                     ext=conn.ext,

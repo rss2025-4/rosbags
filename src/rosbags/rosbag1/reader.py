@@ -27,7 +27,13 @@ else:  # pragma: no cover
 
 from lz4.frame import decompress as lz4_decompress  # type: ignore[import-untyped]
 
-from rosbags.interfaces import Connection, ConnectionExtRosbag1, TopicInfo
+from rosbags.interfaces import (
+    Connection,
+    ConnectionExtRosbag1,
+    MessageDefinition,
+    MessageDefinitionFormat,
+    TopicInfo,
+)
 from rosbags.typesys.msg import normalize_msgtype
 
 if TYPE_CHECKING:
@@ -505,7 +511,9 @@ class Reader:
 
             topics[topic] = TopicInfo(
                 msgtypes.pop() if len(msgtypes := {x.msgtype for x in connections}) == 1 else None,
-                msgdefs.pop() if len(msgdefs := {x.msgdef for x in connections}) == 1 else None,
+                msgdefs.pop()
+                if len(msgdefs := {x.msgdef for x in connections}) == 1
+                else MessageDefinition(MessageDefinitionFormat.NONE, ''),
                 msgcount,
                 connections,
             )
@@ -521,7 +529,10 @@ class Reader:
         header = Header.read(self.bio)
         typ = header.get_string('type')
         md5sum = header.get_string('md5sum')
-        msgdef = header.get_string('message_definition')
+        msgdef = MessageDefinition(
+            MessageDefinitionFormat.MSG,
+            header.get_string('message_definition'),
+        )
 
         callerid = header.get_string('callerid') if 'callerid' in header else None
         latching = int(header.get_string('latching')) if 'latching' in header else None

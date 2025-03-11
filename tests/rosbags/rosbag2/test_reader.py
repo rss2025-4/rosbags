@@ -16,8 +16,9 @@ import pytest
 import zstandard
 from ruamel.yaml import YAML
 
-from rosbags.rosbag2 import Reader, ReaderError, Writer
+from rosbags.rosbag2 import Reader, ReaderError
 from rosbags.rosbag2.metadata import Metadata
+from rosbags.rosbag2.storage_sqlite3 import Sqlite3Writer
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -93,7 +94,7 @@ def empty_bag(tmp_path: Path) -> Path:
     _ = (tmp_path / 'metadata.yaml').write_text(METADATA_EMPTY)
     dbpath = tmp_path / 'db.db3'
     dbh = sqlite3.connect(dbpath)
-    _ = dbh.executescript(Writer.SQLITE_SCHEMA)
+    _ = dbh.executescript(Sqlite3Writer.SQLITE_SCHEMA)
     return tmp_path
 
 
@@ -113,7 +114,7 @@ def bag_sqlite3(request: SubRequest, tmp_path: Path) -> Path:
 
     dbpath = tmp_path / 'db.db3'
     dbh = sqlite3.connect(dbpath)
-    _ = dbh.executescript(Writer.SQLITE_SCHEMA)
+    _ = dbh.executescript(Sqlite3Writer.SQLITE_SCHEMA)
 
     cur = dbh.cursor()
     _ = cur.execute(

@@ -8,7 +8,12 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from rosbags.interfaces import Connection, ConnectionExtRosbag2
+from rosbags.interfaces import (
+    Connection,
+    ConnectionExtRosbag2,
+    MessageDefinition,
+    MessageDefinitionFormat,
+)
 from rosbags.rosbag2 import Writer, WriterError
 from rosbags.typesys import Stores, get_typestore
 
@@ -134,7 +139,7 @@ def test_failure_cases(tmp_path: Path) -> None:
                 1,
                 '/tf',
                 'tf2_msgs/msg/TFMessage',
-                '',
+                MessageDefinition(MessageDefinitionFormat.NONE, ''),
                 '',
                 0,
                 ConnectionExtRosbag2('cdr', []),
@@ -162,7 +167,7 @@ def test_failure_cases(tmp_path: Path) -> None:
         1,
         '/tf',
         'tf_msgs/msg/tf2',
-        '',
+        MessageDefinition(MessageDefinitionFormat.NONE, ''),
         '',
         0,
         ConnectionExtRosbag2('cdr', []),

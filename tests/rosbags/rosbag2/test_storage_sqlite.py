@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 from rosbags.rosbag2.errors import ReaderError
-from rosbags.rosbag2.storage_sqlite3 import ReaderSqlite3
+from rosbags.rosbag2.storage_sqlite3 import Sqlite3Reader
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -125,7 +125,7 @@ def test_detects_schema_version(tmp_path: Path) -> None:
         con = sqlite3.connect(dbpath)
         _ = con.executescript(version)
         con.close()
-        reader = ReaderSqlite3([dbpath], [])
+        reader = Sqlite3Reader([dbpath], [])
         reader.open()
         assert reader.schema == index + 1
         reader.close()
@@ -151,7 +151,7 @@ def test_type_definitions_are_read(tmp_path: Path) -> None:
             ),
         )
     con.close()
-    reader = ReaderSqlite3([dbpath], [])
+    reader = Sqlite3Reader([dbpath], [])
     reader.open()
     assert reader.msgtypes
     reader.close()
@@ -164,7 +164,7 @@ def test_raises_on_closed_reader(tmp_path: Path) -> None:
     _ = con.executescript(SQLITE_SCHEMA_V4)
     con.close()
 
-    reader = ReaderSqlite3([dbpath], [])
+    reader = Sqlite3Reader([dbpath], [])
 
     with pytest.raises(ReaderError):
         _ = reader.get_definitions()

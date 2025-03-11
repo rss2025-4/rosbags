@@ -41,11 +41,26 @@ class Connection(NamedTuple):
     id: int
     topic: str
     msgtype: str
-    msgdef: str
+    msgdef: MessageDefinition
     digest: str
     msgcount: int
     ext: ConnectionExtRosbag1 | ConnectionExtRosbag2
     owner: object
+
+
+class MessageDefinitionFormat(Enum):
+    """Message definition format."""
+
+    NONE = 0
+    MSG = 1
+    IDL = 2
+
+
+class MessageDefinition(NamedTuple):
+    """Message definition."""
+
+    format: MessageDefinitionFormat
+    data: str
 
 
 class QosDurability(Enum):
@@ -113,7 +128,7 @@ class TopicInfo(NamedTuple):
     """Topic information."""
 
     msgtype: str | None
-    msgdef: str | None
+    msgdef: MessageDefinition
     msgcount: int
     connections: list[Connection]
 

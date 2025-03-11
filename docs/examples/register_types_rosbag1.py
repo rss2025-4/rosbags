@@ -22,7 +22,7 @@ def process_bag(src: Path) -> None:
     with Reader(src) as reader:
         typs = {}
         for conn in reader.connections:
-            typs.update(get_types_from_msg(conn.msgdef, conn.msgtype))
+            typs.update(get_types_from_msg(conn.msgdef.data, conn.msgtype))
         typestore.register(typs)
 
         # Now all message types used in the bag are registered

@@ -18,7 +18,12 @@ from typing import TYPE_CHECKING
 
 from lz4.frame import compress as lz4_compress  # type: ignore[import-untyped]
 
-from rosbags.interfaces import Connection, ConnectionExtRosbag1
+from rosbags.interfaces import (
+    Connection,
+    ConnectionExtRosbag1,
+    MessageDefinition,
+    MessageDefinitionFormat,
+)
 from rosbags.typesys import Stores, get_typestore
 from rosbags.typesys.msg import denormalize_msgtype
 
@@ -274,7 +279,7 @@ class Writer:
             len(self.connections),
             topic,
             msgtype,
-            msgdef,
+            MessageDefinition(MessageDefinitionFormat.MSG, msgdef),
             md5sum,
             -1,
             ConnectionExtRosbag1(callerid, latching),
@@ -338,7 +343,7 @@ class Writer:
         header.set_string('topic', connection.topic)
         header.set_string('type', denormalize_msgtype(connection.msgtype))
         header.set_string('md5sum', connection.digest)
-        header.set_string('message_definition', connection.msgdef)
+        header.set_string('message_definition', connection.msgdef.data)
         assert isinstance(connection.ext, ConnectionExtRosbag1)
         if connection.ext.callerid is not None:
             header.set_string('callerid', connection.ext.callerid)

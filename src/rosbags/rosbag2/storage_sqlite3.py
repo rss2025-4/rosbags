@@ -7,6 +7,7 @@ from __future__ import annotations
 import sqlite3
 from typing import TYPE_CHECKING, cast
 
+from rosbags.interfaces import MessageDefinition, MessageDefinitionFormat
 from rosbags.typesys.msg import get_types_from_msg
 from rosbags.typesys.store import Typestore
 
@@ -16,10 +17,10 @@ if TYPE_CHECKING:
     from collections.abc import Generator, Iterable
     from pathlib import Path
 
-    from rosbags.interfaces import Connection
+    from rosbags.interfaces import Connection, ConnectionExtRosbag2
 
 
-class ReaderSqlite3:
+class Sqlite3Reader:
     """Sqlite3 storage reader."""
 
     def __init__(self, paths: Iterable[Path], connections: Iterable[Connection]) -> None:
@@ -108,12 +109,18 @@ class ReaderSqlite3:
             dbconn.close()
         self.dbconns.clear()
 
-    def get_definitions(self) -> dict[str, tuple[str, str]]:
+    def get_definitions(self) -> dict[str, MessageDefinition]:
         """Get message definitions."""
         if not self.dbconns:
             msg = 'Rosbag has not been opened.'
             raise ReaderError(msg)
-        return {x['name']: (x['encoding'][4:], x['msgdef']) for x in self.msgtypes}
+        fmtmap = {
+            'ros2msg': MessageDefinitionFormat.MSG,
+            'ros2idl': MessageDefinitionFormat.IDL,
+        }
+        return {
+            x['name']: MessageDefinition(fmtmap[x['encoding']], x['msgdef']) for x in self.msgtypes
+        }
 
     def messages(
         self,
@@ -176,3 +183,118 @@ class ReaderSqlite3:
 
             for cid, timestamp, data in cur:
                 yield connmap[cid], timestamp, data
+
+
+class Sqlite3Writer:
+    """Sqlite3 Storage Writer."""
+
+    SQLITE_SCHEMA = """
+    CREATE TABLE schema(
+      schema_version INTEGER PRIMARY KEY,
+      ros_distro TEXT NOT NULL
+    );
+    CREATE TABLE metadata(
+      id INTEGER PRIMARY KEY,
+      metadata_version INTEGER NOT NULL,
+      metadata TEXT NOT NULL
+    );
+    CREATE TABLE topics(
+      id INTEGER PRIMARY KEY,
+      name TEXT NOT NULL,
+      type TEXT NOT NULL,
+      serialization_format TEXT NOT NULL,
+      offered_qos_profiles TEXT NOT NULL,
+      type_description_hash TEXT NOT NULL
+    );
+    CREATE TABLE message_definitions(
+      id INTEGER PRIMARY KEY,
+      topic_type TEXT NOT NULL,
+      encoding TEXT NOT NULL,
+      encoded_message_definition TEXT NOT NULL,
+      type_description_hash TEXT NOT NULL
+    );
+    CREATE TABLE messages(
+      id INTEGER PRIMARY KEY,
+      topic_id INTEGER NOT NULL,
+      timestamp INTEGER NOT NULL,
+      data BLOB NOT NULL
+    );
+    CREATE INDEX timestamp_idx ON messages (timestamp ASC);
+    INSERT INTO schema(schema_version, ros_distro) VALUES (4, 'rosbags');
+    """
+
+    def __init__(self, path: Path) -> None:
+        """Initialize sqlite3 storage."""
+        self.path = path / f'{path.name}.db3'
+        self.conn = sqlite3.connect(f'file:{self.path}', uri=True)
+        _ = self.conn.executescript(self.SQLITE_SCHEMA)
+        self.cursor = self.conn.cursor()
+
+    def add_msgtype(self, connection: Connection) -> None:
+        """Add a msgtype.
+
+        Args:
+            connection: Connection.
+
+        """
+        _ = self.cursor.execute(
+            (
+                'INSERT INTO message_definitions (topic_type, encoding,'
+                ' encoded_message_definition, type_description_hash) VALUES(?, ?, ?, ?)'
+            ),
+            (
+                connection.msgtype,
+                'ros2msg' if connection.msgdef.format == MessageDefinitionFormat.MSG else 'ros2idl',
+                connection.msgdef.data,
+                connection.digest,
+            ),
+        )
+
+    def add_connection(self, connection: Connection, offered_qos_profiles: str) -> None:
+        """Add a connection.
+
+        Args:
+            connection: Connection.
+            offered_qos_profiles: Serialized QoS profiles.
+
+        """
+        _ = self.cursor.execute(
+            'INSERT INTO topics VALUES(?, ?, ?, ?, ?, ?)',
+            (
+                connection.id,
+                connection.topic,
+                connection.msgtype,
+                cast('ConnectionExtRosbag2', connection.ext).serialization_format,
+                offered_qos_profiles,
+                connection.digest,
+            ),
+        )
+
+    def write(self, connection: Connection, timestamp: int, data: bytes | memoryview) -> None:
+        """Write message to rosbag2.
+
+        Args:
+            connection: Connection to write message to.
+            timestamp: Message timestamp (ns).
+            data: Serialized message data.
+
+        """
+        _ = self.cursor.execute(
+            'INSERT INTO messages (topic_id, timestamp, data) VALUES(?, ?, ?)',
+            (connection.id, timestamp, data),
+        )
+
+    def close(self, version: int, metadata: str) -> None:
+        """Close rosbag2 after writing.
+
+        Closes open database transactions and writes metadata.yaml.
+
+        """
+        self.cursor.execute(
+            'INSERT INTO metadata(metadata_version, metadata) VALUES(?, ?)',
+            (version, metadata),
+        )
+
+        self.conn.commit()
+        _ = self.conn.execute('PRAGMA optimize')
+        self.conn.close()

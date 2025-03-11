@@ -6,7 +6,6 @@
 
 from __future__ import annotations
 
-import sqlite3
 import warnings
 from enum import IntEnum, auto
 from io import StringIO
@@ -16,15 +15,22 @@ from typing import TYPE_CHECKING
 import zstandard
 from ruamel.yaml import YAML
 
-from rosbags.interfaces import Connection, ConnectionExtRosbag2, Qos
+from rosbags.interfaces import (
+    Connection,
+    ConnectionExtRosbag2,
+    MessageDefinition,
+    MessageDefinitionFormat,
+    Qos,
+)
 from rosbags.rosbag2.metadata import dump_qos_v8, dump_qos_v9, parse_qos
+from rosbags.rosbag2.storage_sqlite3 import Sqlite3Writer
 from rosbags.typesys import Stores, get_typestore
 
 if TYPE_CHECKING:
     import sys
-    from collections.abc import Sequence
+    from collections.abc import Mapping, Sequence
     from types import TracebackType
-    from typing import Literal
+    from typing import Literal, Protocol
 
     if sys.version_info >= (3, 11):
         from typing import Self
@@ -35,6 +41,25 @@ if TYPE_CHECKING:
 
     from .metadata import Metadata
 
+    class StorageWriter(Protocol):
+        """Storage Writer Protocol."""
+
+        path: Path
+
+        def add_msgtype(self, connection: Connection) -> None:
+            """Add a msgtypen."""
+            raise NotImplementedError
+
+        def add_connection(self, connection: Connection, offered_qos_profiles: str) -> None:
+            """Add a connection."""
+            raise NotImplementedError
+
+        def write(self, connection: Connection, timestamp: int, data: bytes | memoryview) -> None:
+            """Write message to rosbag2."""
+
+        def close(self, version: int, metadata: str) -> None:
+            """Close rosbag2 after writing."""
+
 
 class WriterError(Exception):
     """Writer Error."""
@@ -43,45 +68,15 @@ class WriterError(Exception):
 class Writer:
     """Rosbag2 writer.
 
-    This class implements writing of rosbag2 files in version 8. It should be
-    used as a contextmanager.
+    This class implements writing of rosbag2 files in version 8 or 9. It
+    should be used as a contextmanager.
 
     """
 
-    SQLITE_SCHEMA = """
-    CREATE TABLE schema(
-      schema_version INTEGER PRIMARY KEY,
-      ros_distro TEXT NOT NULL
-    );
-    CREATE TABLE metadata(
-      id INTEGER PRIMARY KEY,
-      metadata_version INTEGER NOT NULL,
-      metadata TEXT NOT NULL
-    );
-    CREATE TABLE topics(
-      id INTEGER PRIMARY KEY,
-      name TEXT NOT NULL,
-      type TEXT NOT NULL,
-      serialization_format TEXT NOT NULL,
-      offered_qos_profiles TEXT NOT NULL,
-      type_description_hash TEXT NOT NULL
-    );
-    CREATE TABLE message_definitions(
-      id INTEGER PRIMARY KEY,
-      topic_type TEXT NOT NULL,
-      encoding TEXT NOT NULL,
-      encoded_message_definition TEXT NOT NULL,
-      type_description_hash TEXT NOT NULL
-    );
-    CREATE TABLE messages(
-      id INTEGER PRIMARY KEY,
-      topic_id INTEGER NOT NULL,
-      timestamp INTEGER NOT NULL,
-      data BLOB NOT NULL
-    );
-    CREATE INDEX timestamp_idx ON messages (timestamp ASC);
-    INSERT INTO schema(schema_version, ros_distro) VALUES (4, 'rosbags');
-    """
+    class StoragePlugin(IntEnum):
+        """Storage Plugins."""
+
+        SQLITE3 = auto()
 
     class CompressionMode(IntEnum):
         """Compession modes."""
@@ -97,33 +92,33 @@ class Writer:
 
     VERSION_LATEST: Literal[9] = 9
 
-    def __init__(self, path: Path | str, *, version: Literal[8, 9] | None = None) -> None:
+    STORAGE_PLUGINS: Mapping[Writer.StoragePlugin, type[StorageWriter]] = {
+        StoragePlugin.SQLITE3: Sqlite3Writer,
+    }
+
+    def __init__(
+        self,
+        path: Path | str,
+        *,
+        version: Literal[8, 9] | None = None,
+        storage_plugin: Writer.StoragePlugin = StoragePlugin.SQLITE3,
+    ) -> None:
         """Initialize writer.
 
         Args:
             path: Filesystem path to bag.
             version: Rosbag2 file format version.
+            storage_plugin: Storage plugin to use.
 
         Raises:
             WriterError: Target path exists already, Writer can only create new rosbags.
 
         """
         path = Path(path)
-        self.path = path
         if path.exists():
             msg = f'{path} exists already, not overwriting.'
             raise WriterError(msg)
-        self.metapath = path / 'metadata.yaml'
-        self.dbpath = path / f'{path.name}.db3'
-        self.compression_mode = ''
-        self.compression_format = ''
-        self.compressor: zstandard.ZstdCompressor | None = None
-        self.connections: list[Connection] = []
-        self.counts: dict[int, int] = {}
-        self.conn: sqlite3.Connection | None = None
-        self.cursor: sqlite3.Cursor | None = None
-        self.custom_data: dict[str, str] = {}
-        self.added_types: list[str] = []
+
         if not version:
             warnings.warn(
                 'Writer should be called with an explicit version number (8 or 9).',
@@ -131,7 +126,23 @@ class Writer:
                 stacklevel=2,
             )
             version = 8
+
+        self.path = path
+        self.metapath = path / 'metadata.yaml'
         self.version = version
+        self.storage_plugin = storage_plugin
+
+        self.compression_mode = ''
+        self.compression_format = ''
+        self.compressor: zstandard.ZstdCompressor | None = None
+
+        self.storage: StorageWriter | None = None
+        self.connections: list[Connection] = []
+        self.counts: dict[int, int] = {}
+        self.custom_data: dict[str, str] = {}
+        self.added_types: set[str] = set()
+        self.min_timestamp = 2**63 - 1
+        self.max_timestamp = 0
 
     def set_compression(self, mode: Writer.CompressionMode, fmt: Writer.CompressionFormat) -> None:
         """Enable compression on bag.
@@ -146,7 +157,7 @@ class Writer:
             WriterError: Bag already open.
 
         """
-        if self.conn:
+        if self.storage:
             msg = f'Cannot set compression, bag {self.path} already open.'
             raise WriterError(msg)
         if mode == self.CompressionMode.NONE:
@@ -183,9 +194,7 @@ class Writer:
             msg = f'{self.path} exists already, not overwriting.'
             raise WriterError(msg) from None
 
-        self.conn = sqlite3.connect(f'file:{self.dbpath}', uri=True)
-        _ = self.conn.executescript(self.SQLITE_SCHEMA)
-        self.cursor = self.conn.cursor()
+        self.storage = self.STORAGE_PLUGINS[self.storage_plugin](self.path)
 
     def add_connection(
         self,
@@ -218,7 +227,7 @@ class Writer:
             WriterError: Bag not open or topic previously registered.
 
         """
-        if not self.cursor:
+        if not self.storage:
             msg = 'Bag was not opened.'
             raise WriterError(msg)
 
@@ -235,16 +244,6 @@ class Writer:
         assert msgdef is not None
         assert rihs01
 
-        if msgtype not in self.added_types:
-            _ = self.cursor.execute(
-                (
-                    'INSERT INTO message_definitions (topic_type, encoding,'
-                    ' encoded_message_definition, type_description_hash) VALUES(?, ?, ?, ?)'
-                ),
-                (msgtype, 'ros2msg', msgdef, rihs01),
-            )
-            self.added_types.append(msgtype)
-
         if isinstance(offered_qos_profiles, str):
             warnings.warn(
                 'Writer.add_connection should be called with instantiated QoS profiles.',
@@ -255,11 +254,18 @@ class Writer:
         else:
             qos_profiles = list(offered_qos_profiles)
 
+        fmt = 'ros2idl' if msgdef.startswith('=' * 80 + '\nIDL: ') else 'ros2msg'
+
+        fmtmap = {
+            'ros2msg': MessageDefinitionFormat.MSG,
+            'ros2idl': MessageDefinitionFormat.IDL,
+        }
+
         connection = Connection(
             id=len(self.connections) + 1,
             topic=topic,
             msgtype=msgtype,
-            msgdef=msgdef,
+            msgdef=MessageDefinition(fmtmap[fmt], msgdef),
             digest=rihs01,
             msgcount=0,
             ext=ConnectionExtRosbag2(
@@ -289,15 +295,10 @@ class Writer:
             yaml.dump(dumped, stream)  # pyright: ignore[reportUnknownMemberType]
             dumped = stream.getvalue().strip()
 
-        meta = (
-            connection.id,
-            topic,
-            msgtype,
-            serialization_format,
-            dumped,
-            rihs01,
-        )
-        _ = self.cursor.execute('INSERT INTO topics VALUES(?, ?, ?, ?, ?, ?)', meta)
+        if msgtype not in self.added_types:
+            self.storage.add_msgtype(connection)
+            self.added_types.add(msgtype)
+        self.storage.add_connection(connection, dumped)
         return connection
 
     def write(self, connection: Connection, timestamp: int, data: bytes | memoryview) -> None:
@@ -312,7 +313,7 @@ class Writer:
             WriterError: Bag not open or topic not registered.
 
         """
-        if not self.cursor:
+        if not self.storage:
             msg = 'Bag was not opened.'
             raise WriterError(msg)
         if connection not in self.connections:
@@ -323,11 +324,10 @@ class Writer:
             assert self.compressor
             data = self.compressor.compress(data)
 
-        _ = self.cursor.execute(
-            'INSERT INTO messages (topic_id, timestamp, data) VALUES(?, ?, ?)',
-            (connection.id, timestamp, data),
-        )
+        self.storage.write(connection, timestamp, data)
         self.counts[connection.id] += 1
+        self.min_timestamp = min(timestamp, self.min_timestamp)
+        self.max_timestamp = max(timestamp, self.max_timestamp)
 
     def close(self) -> None:
         """Close rosbag2 after writing.
@@ -335,25 +335,26 @@ class Writer:
         Closes open database transactions and writes metadata.yaml.
 
         """
-        assert self.cursor
-        assert self.conn
-        self.cursor.close()
-        self.cursor = None
+        assert self.storage
 
-        duration: int
-        start: int
-        count: int
-        duration, start, count = self.conn.execute(
-            'SELECT max(timestamp) - min(timestamp), min(timestamp), count(*) FROM messages',
-        ).fetchone()
+        path = self.storage.path
+        dst = (
+            path.with_suffix(f'{path.suffix}.{self.compression_format}')
+            if self.compression_mode == 'file'
+            else path
+        )
+
+        duration = self.max_timestamp - self.min_timestamp
+        start = self.min_timestamp
+        count = sum(self.counts.values())
 
         dump_qos = dump_qos_v9 if self.version >= 9 else dump_qos_v8
 
         metadata: dict[str, Metadata] = {
             'rosbag2_bagfile_information': {
                 'version': self.version,
-                'storage_identifier': 'sqlite3',
-                'relative_file_paths': [self.dbpath.name],
+                'storage_identifier': self.storage_plugin.name.lower(),
+                'relative_file_paths': [dst.name],
                 'duration': {'nanoseconds': duration},
                 'starting_time': {'nanoseconds_since_epoch': start},
                 'message_count': count,
@@ -375,7 +376,7 @@ class Writer:
                 'compression_mode': self.compression_mode,
                 'files': [
                     {
-                        'path': self.dbpath.name,
+                        'path': dst.name,
                         'starting_time': {'nanoseconds_since_epoch': start},
                         'duration': {'nanoseconds': duration},
                         'message_count': count,
@@ -386,33 +387,23 @@ class Writer:
             },
         }
 
-        metastr = StringIO()
         yaml = YAML(typ='safe')
         yaml.default_flow_style = False
-        yaml.dump(metadata['rosbag2_bagfile_information'], metastr)  # pyright: ignore[reportUnknownMemberType]
-
-        self.conn.execute(
-            'INSERT INTO metadata(metadata_version, metadata) VALUES(?, ?)',
-            (self.version, metastr.getvalue().strip()),
-        )
-
-        self.conn.commit()
-        _ = self.conn.execute('PRAGMA optimize')
-        self.conn.close()
-
-        if self.compression_mode == 'file':
-            assert self.compressor
-            src = self.dbpath
-            self.dbpath = src.with_suffix(f'.db3.{self.compression_format}')
-            with src.open('rb') as infile, self.dbpath.open('wb') as outfile:
-                _ = self.compressor.copy_stream(infile, outfile)
-            src.unlink()
-            metadata['rosbag2_bagfile_information']['relative_file_paths'] = [self.dbpath.name]
-            metadata['rosbag2_bagfile_information']['files'][0]['path'] = self.dbpath.name
 
         metastr = StringIO()
         yaml.dump(metadata, metastr)  # pyright: ignore[reportUnknownMemberType]
         self.metapath.write_text(metastr.getvalue(), 'utf8')
+
+        metastr = StringIO()
+        yaml.dump(metadata['rosbag2_bagfile_information'], metastr)  # pyright: ignore[reportUnknownMemberType]
+        self.storage.close(self.version, metastr.getvalue().strip())
+        self.storage = None
+
+        if self.compression_mode == 'file':
+            assert self.compressor
+            with path.open('rb') as infile, dst.open('wb') as outfile:
+                _ = self.compressor.copy_stream(infile, outfile)
+            path.unlink()
 
     def __enter__(self) -> Self:
         """Open rosbag2 when entering contextmanager."""

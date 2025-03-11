@@ -14,7 +14,7 @@ from heapq import merge
 from itertools import groupby
 from typing import TYPE_CHECKING
 
-from rosbags.interfaces import TopicInfo
+from rosbags.interfaces import MessageDefinition, MessageDefinitionFormat, TopicInfo
 from rosbags.rosbag1 import (
     Reader as Reader1,
     ReaderError as ReaderError1,
@@ -122,17 +122,19 @@ class AnyReader:
 
         typs: Typesdict = {}
         self.connections = [y for x in self.readers for y in x.connections]
-        connections = [x for x in self.connections if x.msgdef]
+        connections = [
+            x for x in self.connections if x.msgdef.format != MessageDefinitionFormat.NONE
+        ]
         if connections:
             sep = '=' * 80 + '\n'
             for connection in connections:
-                if connection.msgdef.startswith(f'{sep}IDL: '):
-                    for msgdef in connection.msgdef.split(sep)[1:]:
+                if connection.msgdef.data.startswith(f'{sep}IDL: '):
+                    for msgdef in connection.msgdef.data.split(sep)[1:]:
                         hdr, idl = msgdef.split('\n', 1)
                         assert hdr.startswith('IDL: ')
                         typs.update(get_types_from_idl(idl))
                 else:
-                    typs.update(get_types_from_msg(connection.msgdef, connection.msgtype))
+                    typs.update(get_types_from_msg(connection.msgdef.data, connection.msgtype))
 
         elif self.default_typestore:
             typs.update(self.default_typestore.fielddefs)
@@ -203,7 +205,9 @@ class AnyReader:
             infos = [x[1] for x in names_infos]
             return TopicInfo(
                 msgtypes.pop() if len(msgtypes := {x.msgtype for x in infos}) == 1 else None,
-                msgdefs.pop() if len(msgdefs := {x.msgdef for x in infos}) == 1 else None,
+                msgdefs.pop()
+                if len(msgdefs := {x.msgdef for x in infos}) == 1
+                else MessageDefinition(MessageDefinitionFormat.NONE, ''),
                 sum(x.msgcount for x in infos),
                 functools.reduce(operator.iadd, (x.connections for x in infos), []),
             )
