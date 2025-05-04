@@ -32,6 +32,7 @@ class Stores(Enum):
     ROS2_JAZZY = 'ros2_jazzy'
     """Jazzy Jalisco."""
 
+    ROS2_HUMBLE_RSS = 'ros2_humble_rss'
 
 def get_typestore(name: Stores) -> Typestore:
     """Get typestore by name."""

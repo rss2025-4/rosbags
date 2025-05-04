@@ -41,11 +41,14 @@ def generate_docs(name: str, typs: Typesdict) -> str:
         res.append(namespace)
         res.append('*' * len(namespace))
 
-        for _, msg in msgs:
-            res.append(
-                f'- :py:class:`{msg} <rosbags.typesys.stores.{name}.{namespace}__msg__{msg}>`',
-            )
-        res.append('')
+        try:
+            for _, msg in msgs:
+                res.append(
+                    f'- :py:class:`{msg} <rosbags.typesys.stores.{name}.{namespace}__msg__{msg}>`',
+                )
+            res.append('')
+        except:
+            pass
     return '\n'.join(res)
 
 
@@ -59,7 +62,11 @@ def get_types_from_path(path: Path) -> Typesdict:
         for fname in files:
             path = Path(root, fname)
             if path.suffix == '.idl':
-                typs.update(get_types_from_idl(path.read_text(encoding='utf-8')))
+                try:
+                    typs.update(get_types_from_idl(path.read_text(encoding='utf-8')))
+                except:
+                    print("failed:", path)
+                    pass
             elif path.suffix == '.msg':
                 name = path.relative_to(path.parents[2]).with_suffix('')
                 if '/msg/' not in str(name):
